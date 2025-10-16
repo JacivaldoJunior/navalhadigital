@@ -1,0 +1,1458 @@
+<!DOCTYPE html> 
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Navalha Digital - MVP Barbearia (Login + Master) v0.6</title>
+
+  <!-- Tailwind + Supabase -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- ===== LAYOUT BARBEARIA (papel + overlay + dark inputs) ===== -->
+  <style>
+    /* --- Force o papel em TODO o app --- */
+    html, body { min-height: 100%; }
+    body {
+      /* Se preferir, troque o caminho abaixo para o real do seu projeto */
+      background: url("minha-imagem.png") repeat;
+      background-repeat: repeat !important;
+      background-size: 200px !important;
+      background-color: #0a0a0a !important;
+      color: #fefce8;
+    }
+
+    /* Camada escura fixa, sem precisar de <div class="overlay"> */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.94);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Garante que todo conteúdo fique acima do escurecido */
+    #app, #auth-screen, header, main, section, footer {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Cards e botões no tema */
+    .card { background-color:#111827; color:#facc15; }
+    .btn-yellow { background-color:#facc15; color:#111827; }
+    .btn-yellow:hover { background-color:#eab308; }
+
+    /* Inputs dark bonitos */
+    input, select, textarea{
+      background-color:#0b1220 !important; border:1px solid #374151 !important;
+      color:#e5e7eb !important; border-radius:.5rem; padding:.5rem .75rem;
+    }
+    input::placeholder, textarea::placeholder { color:#9ca3af !important; }
+    input:focus, select:focus, textarea:focus{
+      outline:none !important; border-color:#eab308 !important;
+      box-shadow:0 0 0 3px rgba(234,179,8,.25) !important;
+    }
+
+    /* Impressão */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; }
+      body::after { display: none !important; }
+      #print-area { display: block !important; }
+      #app, header, main, footer { background: #fff !important; color: #111 !important; }
+    }
+  </style>
+</head>
+
+<body class="text-gray-100">
+  <!-- === OVERLAY para aplicar o papel no app todo === -->
+  <div class="overlay">
+
+    <!-- ===================== AUTH SCREEN ===================== -->
+    <section id="auth-screen" class="min-h-[80vh] flex items-center justify-center p-4">
+      <div class="w-full max-w-md card rounded-2xl shadow border border-yellow-500/30 p-6">
+        <h1 class="text-2xl font-bold text-yellow-400 text-center">Navalha Digital</h1>
+        <p class="mt-1 text-center text-sm text-yellow-200/80">Acesse com seu e-mail e senha</p>
+        <form id="auth-form" class="mt-5 space-y-3">
+          <div>
+            <label class="block text-sm text-yellow-200">E-mail</label>
+            <input id="auth-email" type="email" placeholder="voce@exemplo.com" required class="w-full mt-1" />
+          </div>
+          <div>
+            <label class="block text-sm text-yellow-200">Senha</label>
+            <input id="auth-pass" type="password" placeholder="mín. 6 caracteres" minlength="6" required class="w-full mt-1" />
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-signin" type="submit" class="btn-yellow px-4 py-2 rounded w-full">Entrar</button>
+            <button id="btn-signup" type="button" class="px-4 py-2 rounded w-full border border-yellow-500/40 text-yellow-300">Criar conta</button>
+          </div>
+          <div id="auth-msg" class="text-xs text-yellow-300"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===================== APP ===================== -->
+    <div id="app" class="hidden">
+      <header class="px-4 py-3 shadow border-b border-yellow-500/20">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+          <h1 class="text-xl font-bold text-yellow-400">Navalha Digital</h1>
+          <nav class="space-x-2 no-print flex items-center">
+            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="agendar">Agenda</button>
+            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="registrar">Registrar Corte</button>
+            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="caixa">Caixa</button>
+            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="relatorios">Relatórios</button>
+            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="config">Configurações</button>
+            <button id="tab-admin-btn" class="hidden tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="admin">Admin</button>
+            <span id="tenant-badge" class="hidden ml-3 text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300"></span>
+            <button id="btn-logout" class="ml-3 px-3 py-1.5 rounded border border-yellow-500/40 text-yellow-300">Sair</button>
+          </nav>
+        </div>
+      </header>
+
+      <main class="max-w-6xl mx-auto p-4 space-y-6">
+        <!-- Avisos -->
+        <div id="toast" class="hidden rounded-lg border border-yellow bg-black p-3 shadow text-yellow-400"></div>
+
+        <!-- =================== AGENDA =================== -->
+        <section id="tab-agendar" class="card rounded-xl shadow p-4 grid md:grid-cols-2 gap-6">
+          <div>
+            <h2 class="text-lg font-semibold mb-3 text-yellow-300">Novo Agendamento</h2>
+            <form id="form-agenda" class="space-y-3">
+              <div>
+                <label class="block text-sm text-yellow-200">Data e hora</label>
+                <input id="ag-data" type="datetime-local" required class="w-full mt-1" />
+              </div>
+              <div>
+                <label class="block text-sm text-yellow-200">Cliente</label>
+                <input id="ag-cliente" type="text" placeholder="Nome do cliente" required class="w-full mt-1" />
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm text-yellow-200">Barbeiro</label>
+                  <select id="ag-barbeiro" required class="w-full mt-1"></select>
+                </div>
+                <div>
+                  <label class="block text-sm text-yellow-200">Serviço</label>
+                  <select id="ag-servico" required class="w-full mt-1"></select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm text-yellow-200">Observações (opcional)</label>
+                <textarea id="ag-obs" class="w-full mt-1" rows="2" placeholder="Ex.: preferir navalhado..."></textarea>
+              </div>
+              <div class="flex gap-2">
+                <button class="btn-yellow px-4 py-2 rounded" type="submit">Salvar agendamento</button>
+                <button id="btn-clear-agenda" class="px-4 py-2 rounded border border-yellow-500/40 text-yellow-300" type="button">Limpar</button>
+              </div>
+            </form>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-lg font-semibold text-yellow-300">Próximos agendamentos</h2>
+              <div class="text-sm text-yellow-200/80" id="ag-count"></div>
+            </div>
+            <div id="lista-agenda" class="divide-y rounded-lg border border-yellow-500/30"></div>
+
+            <!-- ======= INBOX: Solicitações vindas do Booking ======= -->
+            <div class="mt-6">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-yellow-300">Solicitações do Booking</h3>
+                <div id="rq-count" class="text-sm text-yellow-200/80"></div>
+              </div>
+              <div id="booking-inbox" class="divide-y rounded-lg border border-yellow-500/30"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= REGISTRAR CORTE ================= -->
+        <section id="tab-registrar" class="hidden card rounded-xl shadow p-4">
+          <h2 class="text-lg font-semibold mb-3 text-yellow-300">Registrar Corte / Venda</h2>
+          <form id="form-venda" class="grid md:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-sm text-yellow-200">Data</label>
+              <input id="vd-data" type="date" required class="w-full mt-1" />
+            </div>
+            <div>
+              <label class="block text-sm text-yellow-200">Barbeiro</label>
+              <select id="vd-barbeiro" required class="w-full mt-1"></select>
+            </div>
+            <div>
+              <label class="block text-sm text-yellow-200">Serviço</label>
+              <select id="vd-servico" required class="w-full mt-1"></select>
+            </div>
+            <div>
+              <label class="block text-sm text-yellow-200">Pagamento</label>
+              <select id="vd-pag" required class="w-full mt-1">
+                <option value="pix">PIX</option>
+                <option value="debito">Débito</option>
+                <option value="credito">Crédito</option>
+                <option value="dinheiro">Dinheiro</option>
+              </select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-sm text-yellow-200">Valor (R$)</label>
+              <input id="vd-valor" type="number" step="0.01" min="0" placeholder="Deixa em branco para usar valor do serviço" class="w-full mt-1" />
+            </div>
+            <div class="flex items-end">
+              <button class="btn-yellow px-4 py-2 rounded" type="submit">Registrar</button>
+            </div>
+          </form>
+          <div class="mt-6">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-yellow-300">Vendas recentes</h3>
+              <button id="btn-exportar" class="no-print text-sm px-3 py-1.5 rounded border border-yellow-500/40 text-yellow-300">Exportar CSV</button>
+            </div>
+            <div id="lista-vendas" class="mt-2 rounded-lg border border-yellow-500/30 divide-y"></div>
+          </div>
+        </section>
+
+        <!-- ================= CAIXA (NOVO) ================= -->
+        <section id="tab-caixa" class="hidden card rounded-xl shadow p-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold mb-3 text-yellow-300">Fechamento de Caixa</h2>
+            <div class="text-xs text-yellow-200/80">Fechamentos são salvos no servidor e sincronizados em tempo real.</div>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <div class="flex flex-wrap items-end gap-3">
+                <div>
+                  <label class="block text-sm text-yellow-200">Data do caixa</label>
+                  <input id="cx-data" type="date" class="rounded" />
+                </div>
+                <button id="cx-atualizar" class="btn-yellow px-4 py-2 rounded">Atualizar</button>
+                <button id="cx-fechar" class="px-4 py-2 rounded border border-yellow-500/40 text-yellow-300">Fechar caixa + PDF</button>
+              </div>
+
+              <div class="mt-4 grid md:grid-cols-3 gap-3">
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Total do dia</div>
+                  <div class="text-2xl font-bold" id="cx-total-dia">R$ 0,00</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Qtde de vendas</div>
+                  <div class="text-2xl font-bold" id="cx-qtde">0</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Barbeiro destaque</div>
+                  <div class="text-2xl font-bold" id="cx-top-barbeiro">—</div>
+                </div>
+              </div>
+
+              <div class="mt-4 grid md:grid-cols-4 gap-3">
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">PIX</div>
+                  <div class="text-lg font-semibold" id="cx-pix">R$ 0,00</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Débito</div>
+                  <div class="text-lg font-semibold" id="cx-debito">R$ 0,00</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Crédito</div>
+                  <div class="text-lg font-semibold" id="cx-credito">R$ 0,00</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Dinheiro</div>
+                  <div class="text-lg font-semibold" id="cx-dinheiro">R$ 0,00</div>
+                </div>
+              </div>
+
+              <div class="mt-4 rounded-lg border border-yellow-500/30">
+                <div class="px-3 py-2 font-semibold text-yellow-300">Vendas do dia</div>
+                <div id="cx-tabela" class="divide-y"></div>
+              </div>
+            </div>
+
+            <aside class="rounded-lg border border-yellow-500/30 p-3">
+              <h3 class="font-semibold text-yellow-300">Histórico de fechamentos</h3>
+              <div id="cx-historico" class="mt-2 space-y-2 text-sm"></div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ================= RELATÓRIOS ================= -->
+        <section id="tab-relatorios" class="hidden card rounded-xl shadow p-4">
+          <div class="grid md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <h2 class="text-lg font-semibold mb-3 text-yellow-300">Painel Mensal</h2>
+              <div class="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label class="block text-sm text-yellow-200">Mês</label>
+                  <input id="rl-mes" type="month" class="rounded" />
+                </div>
+                <button id="btn-aplicar-filtro" class="px-4 py-2 rounded btn-yellow">Aplicar</button>
+                <button id="btn-print" class="px-4 py-2 rounded border border-yellow-500/40 text-yellow-300 no-print">Imprimir</button>
+              </div>
+
+              <div class="mt-4 grid md:grid-cols-3 gap-3">
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Total de cortes</div>
+                  <div class="text-2xl font-bold" id="kpi-total-cortes">0</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Faturamento</div>
+                  <div class="text-2xl font-bold" id="kpi-faturamento">R$ 0,00</div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <div class="text-sm text-yellow-200/80">Barbeiro destaque</div>
+                  <div class="text-2xl font-bold" id="kpi-top-barbeiro">—</div>
+                </div>
+              </div>
+
+              <div class="mt-4 grid md:grid-cols-2 gap-4">
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <h3 class="font-semibold mb-2 text-yellow-300">Por forma de pagamento</h3>
+                  <div id="rl-pagamento" class="space-y-1 text-sm"></div>
+                </div>
+                <div class="rounded-lg border border-yellow-500/30 p-3">
+                  <h3 class="font-semibold mb-2 text-yellow-300">Por barbeiro</h3>
+                  <div id="rl-barbeiro" class="space-y-1 text-sm"></div>
+                </div>
+              </div>
+
+              <div class="mt-4 rounded-lg border border-yellow-500/30">
+                <div class="px-3 py-2 font-semibold text-yellow-300">Detalhe de vendas do mês</div>
+                <div id="rl-tabela" class="divide-y"></div>
+              </div>
+            </div>
+            <aside class="rounded-lg border border-yellow-500/30 p-3">
+              <h3 class="font-semibold text-yellow-300">Serviços cadastrados</h3>
+              <div id="servicos-list" class="space-y-2"></div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ================= CONFIG ================= -->
+        <section id="tab-config" class="hidden card rounded-xl shadow p-4">
+          <h2 class="text-lg font-semibold mb-3 text-yellow-300">Configurações rápidas</h2>
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <h3 class="font-semibold text-yellow-300">Barbeiros</h3>
+              <form id="form-barbeiro" class="flex gap-2 mt-2">
+                <input id="novo-barbeiro" class="flex-1" placeholder="Nome do barbeiro" />
+                <button class="px-3 py-2 rounded btn-yellow" type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-barbeiros" class="mt-3 space-y-2"></ul>
+            </div>
+            <div>
+              <h3 class="font-semibold text-yellow-300">Serviços</h3>
+              <form id="form-servico" class="grid grid-cols-2 gap-2 mt-2">
+                <input id="sv-nome" placeholder="Nome (ex: Corte disfarçado)" />
+                <input id="sv-valor" type="number" step="0.01" min="0" placeholder="Valor em R$" />
+                <button class="col-span-2 px-3 py-2 rounded btn-yellow" type="submit">Salvar serviço</button>
+              </form>
+              <ul id="lista-servicos" class="mt-3 space-y-2"></ul>
+            </div>
+          </div>
+          <div class="mt-6 grid md:grid-cols-2 gap-4">
+            <div class="flex gap-2 items-center">
+              <button id="btn-reset" class="px-3 py-2 rounded border border-yellow-500/40 text-yellow-300">Apagar todos os dados (local)</button>
+              <div class="text-xs text-yellow-200/80">Dados ficam separados por usuário/cliente.</div>
+            </div>
+            <div class="rounded-lg border border-yellow-500/30 p-3">
+              <h3 class="font-semibold text-yellow-300">Supabase</h3>
+              <div class="text-xs text-yellow-200/80 mb-2">Cole aqui se você não quiser deixar a chave no código. Fica salvo só no navegador.</div>
+              <div class="grid gap-2">
+                <input id="cfg-sb-url" placeholder="URL do projeto (https://...supabase.co)" />
+                <input id="cfg-sb-anon" placeholder="Anon public key" />
+                <div class="flex gap-2">
+                  <button id="cfg-sb-save" class="btn-yellow px-3 py-2 rounded">Salvar e recarregar</button>
+                  <button id="cfg-sb-clear" class="px-3 py-2 rounded border border-yellow-500/40 text-yellow-300">Limpar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= ADMIN (Master) ================= -->
+        <section id="tab-admin" class="hidden card rounded-xl shadow p-4">
+          <h2 class="text-lg font-semibold mb-3 text-yellow-300">Admin – Clientes</h2>
+          <p class="text-sm text-yellow-200/80 mb-3">Crie e gerencie os clientes (barbearias). Você pode entrar como um cliente para operar o sistema em nome dele.</p>
+
+          <form id="form-tenant" class="grid md:grid-cols-3 gap-2 mb-4">
+            <input id="tn-nome" placeholder="Nome do cliente (ex.: Barbearia do João)" />
+            <input id="tn-id" placeholder="ID (opcional, deixe em branco para gerar)" />
+            <button class="px-3 py-2 rounded btn-yellow" type="submit">Adicionar cliente</button>
+          </form>
+
+          <div id="tenants-list" class="space-y-2 mb-8"></div>
+
+          <!-- NOVO (Admin: criar usuário do cliente) -->
+          <h3 class="font-semibold text-yellow-300 mt-4">Criar usuário para o cliente selecionado</h3>
+          <p class="text-xs text-yellow-200/70 mb-2">O usuário receberá confirmação por e-mail. Ao entrar, já virá vinculado a este cliente e com o nível escolhido.</p>
+          <form id="form-create-user" class="grid md:grid-cols-5 gap-2">
+            <input id="cu-name" placeholder="Nome do usuário (opcional)" class="md:col-span-2" />
+            <input id="cu-email" type="email" placeholder="email@exemplo.com" required />
+            <input id="cu-pass" type="password" placeholder="Senha temporária (mín. 6)" minlength="6" required />
+            <select id="cu-role" required>
+              <option value="" disabled selected>Nível</option>
+              <option value="manager">Gerente</option>
+              <option value="barber">Funcionário (Barbeiro)</option>
+            </select>
+            <button class="px-3 py-2 rounded btn-yellow" type="submit">Criar usuário</button>
+          </form>
+          <div id="cu-msg" class="text-xs text-yellow-200/80 mt-1"></div>
+          <!-- /NOVO -->
+        </section>
+      </main>
+
+      <footer class="text-center text-xs text-yellow-400 py-6">Navalha Digital – MVP Local First (LocalStorage). Versão 0.6 (Fechamento de Caixa + PDF + Booking Inbox + Realtime + Criação de Usuário por Admin)</footer>
+    </div>
+  </div><!-- /overlay -->
+
+  <!-- ====== ÁREA DE IMPRESSÃO (preenchida dinamicamente para PDF) ====== -->
+  <div id="print-area" class="hidden"></div>
+
+  <script>
+    // ========================= SUPABASE CONFIG =========================
+    const SUPABASE_URL  = "https://xvrfpciqnuzxfsaktlja.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2cmZwY2lxbnV6eGZzYWt0bGphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1NjI1NjYsImV4cCI6MjA3MTEzODU2Nn0.JBmK1MnM8-8mjKq5bLHOh-9alHGTpCiXtsZnC-uFGlc";
+
+    // E-mail(s) master:
+    const MASTER_EMAILS = [ "jacivaldojr@gmail.com" ];
+
+    function resolveSupabaseConfig(){
+      const cfgUrl = localStorage.getItem('bb_cfg_supabase_url');
+      const cfgKey = localStorage.getItem('bb_cfg_supabase_anon');
+      const url = cfgUrl || SUPABASE_URL;
+      const key = cfgKey || SUPABASE_ANON_KEY;
+      return { url, key };
+    }
+
+    let supabase = null;
+    function createSupabase(){
+      const { url, key } = resolveSupabaseConfig();
+      if (window.supabase?.createClient && url && key){
+        supabase = window.supabase.createClient(url, key);
+      } else {
+        supabase = null;
+      }
+    }
+
+    // Helpers Supabase
+    function sb(){ if (!supabase) throw new Error('Supabase não configurado'); return supabase; }
+    function withTenant(q){ return activeTenantId ? q.eq('salon_id', activeTenantId) : q; }
+
+    // ========================= STATE =========================
+    let __user = null; // supabase user
+    let isMaster = false;
+    let activeTenantId = null;
+    let activeTenantName = null;
+
+    let __tabsBound = false;
+
+    function showApp(){ document.getElementById('app').classList.remove('hidden'); document.getElementById('auth-screen').classList.add('hidden'); }
+    function hideApp(){ document.getElementById('app').classList.add('hidden'); document.getElementById('auth-screen').classList.remove('hidden'); }
+
+    async function bootstrapAuth(){
+      createSupabase();
+
+      if (!supabase){
+        document.getElementById('auth-msg').textContent =
+          'Cole a URL e a anon key de Supabase nas Configurações e clique "Salvar e recarregar".';
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      __user = session?.user || null;
+      computeRole();
+      if (__user) showApp(); else hideApp();
+      await initAfterAuth();
+      setupRealtime(); // <--- realtime
+      supabase.auth.onAuthStateChange((_evt, session)=>{
+        __user = session?.user || null;
+        computeRole();
+        if (__user) showApp(); else hideApp();
+        initAfterAuth();
+        setupRealtime(); // <--- realtime após mudança de sessão
+      });
+    }
+
+    // ====================== TENANTS (apenas master) ======================
+    const TENANTS_KEY = () => `bb_${__user?.id || 'anon'}_tenants`;
+    function loadTenants(){ try{ return JSON.parse(localStorage.getItem(TENANTS_KEY())) || []; }catch(_){ return []; } }
+    function saveTenants(list){ localStorage.setItem(TENANTS_KEY(), JSON.stringify(list)); }
+
+    function slugify(str){ return (str||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,40); }
+    function randomId(n=5){ const abc='abcdefghijklmnopqrstuvwxyz0123456789'; let s=''; for(let i=0;i<n;i++) s+=abc[Math.floor(Math.random()*abc.length)]; return s; }
+
+    function setActiveTenant(id, nome){
+      activeTenantId = id; activeTenantName = nome || id;
+      localStorage.setItem('bb_master_last_tenant', id);
+      applyRoleUI();
+      setupRealtime();      // <--- refaz a inscrição realtime ao trocar cliente
+      refreshAll();
+    }
+
+    function applyRoleUI(){
+      document.querySelector('#tab-admin-btn')?.classList.toggle('hidden', !isMaster);
+      const badge = document.querySelector('#tenant-badge');
+      if (isMaster && activeTenantId){ badge.classList.remove('hidden'); badge.textContent = `Cliente: ${activeTenantName}`; }
+      else { badge.classList.add('hidden'); badge.textContent=''; }
+    }
+
+    function ensureDefaultTenantForMaster(){
+      if (!isMaster) return;
+      const list = loadTenants();
+      if (list.length > 0) return;
+      const id = `barbearia-jacivaldo-${randomId(5)}`;
+      const nome = 'Barbearia do Jacivaldo';
+      list.push({ id, nome });
+      saveTenants(list);
+      setActiveTenant(id, nome);
+      toast('Cliente padrão criado e selecionado para o master.');
+    }
+
+    // ========================= ROLE / MASTER =========================
+    function computeRole(){
+      const email = (__user?.email || '').toLowerCase();
+      isMaster = !!email && MASTER_EMAILS.map(e=>e.toLowerCase()).includes(email);
+
+      // NOVO (user_metadata): se não for master, puxa tenant do user_metadata
+      if (!isMaster && __user?.user_metadata){
+        const meta = __user.user_metadata || {};
+        if (meta.salon_id){ activeTenantId = meta.salon_id; activeTenantName = meta.salon_name || meta.salon_id; }
+        else { activeTenantId = null; activeTenantName = null; }
+      } else if (isMaster){
+        const last = localStorage.getItem('bb_master_last_tenant');
+        const t = loadTenants().find(x=>x.id===last);
+        if (t) setActiveTenant(t.id, t.nome);
+        else { activeTenantId = null; activeTenantName = null; }
+      } else {
+        activeTenantId = null; activeTenantName = null;
+      }
+
+      ensureDefaultTenantForMaster();
+      applyRoleUI();
+    }
+
+    // ========================= UTIL =========================
+    const brl = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const el = (sel, root=document) => root.querySelector(sel);
+    const els = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    function toast(msg){ const t = el('#toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 1600); }
+
+    // ===================== STORAGE (Local, por usuário/cliente) =====================
+    const STORE_KEYS = { BARBEIROS: 'barbeiros', SERVICOS: 'servicos', VENDAS: 'vendas', AGENDA: 'agenda', CLOSURES: 'caixa' };
+
+    // >>>>>>> ESCOPO ATUAL (corrigido para usar salon_id)
+    function currentScope(){
+      // Master continua por cliente selecionado
+      if (isMaster) return activeTenantId || 'no-tenant';
+
+      // Usuário normal: escopo é a barbearia (salon_id)
+      const salonId = __user?.user_metadata?.salon_id;
+      if (salonId) return salonId;
+
+      // Fallback temporário
+      return __user?.id || 'anon';
+    }
+
+    const scopeKey = (k) => `bb_${currentScope()}_${k}`;
+
+    const Storage = {
+      get(k, fallback){ try{ return JSON.parse(localStorage.getItem(scopeKey(k))) ?? fallback; }catch(_){ return fallback; } },
+      set(k, v){ localStorage.setItem(scopeKey(k), JSON.stringify(v)); },
+      push(k, item){ const arr = Storage.get(k, []); arr.push(item); Storage.set(k, arr); return arr; },
+      clear(){ Object.values(STORE_KEYS).forEach(k=>localStorage.removeItem(scopeKey(k))); }
+    };
+
+    // ================== MIGRAÇÃO DE DADOS ANTIGOS ==================
+    function migrateAnonToCurrentScope(){
+      const curPrefix  = `bb_${currentScope()}_`;
+      const anonPrefix = `bb_anon_`;
+      if (curPrefix === anonPrefix) return;
+
+      Object.values(STORE_KEYS).forEach(k=>{
+        const aKey = anonPrefix + k;
+        const cKey = curPrefix  + k;
+        const aVal = localStorage.getItem(aKey);
+        if (aVal && !localStorage.getItem(cKey)) {
+          localStorage.setItem(cKey, aVal);
+        }
+      });
+    }
+
+    function migrateUserIdToTenantScope(){
+      if (isMaster) return;
+      const tenant = __user?.user_metadata?.salon_id;
+      const userId = __user?.id;
+      if (!tenant || !userId) return;
+
+      const userPrefix   = `bb_${userId}_`;
+      const tenantPrefix = `bb_${tenant}_`;
+
+      Object.values(STORE_KEYS).forEach(k=>{
+        const uKey = userPrefix + k;
+        const tKey = tenantPrefix + k;
+        const uVal = localStorage.getItem(uKey);
+        if (uVal && !localStorage.getItem(tKey)) {
+          localStorage.setItem(tKey, uVal);
+        }
+      });
+    }
+
+    // ====================== DADOS PADRÃO ======================
+    function seed(){
+      // migra para o escopo atual antes de semear
+      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
+      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+
+      // evita semear quando o master ainda não selecionou um cliente
+      if (isMaster && !activeTenantId) return;
+
+      if (!Storage.get(STORE_KEYS.BARBEIROS)){
+        Storage.set(STORE_KEYS.BARBEIROS, [
+          { id: crypto.randomUUID(), nome: 'Lucas' },
+          { id: crypto.randomUUID(), nome: 'Pedro' },
+          { id: crypto.randomUUID(), nome: 'Saulo' },
+        ]);
+      }
+      if (!Storage.get(STORE_KEYS.SERVICOS)){
+        Storage.set(STORE_KEYS.SERVICOS, [
+          { id: crypto.randomUUID(), nome: 'Corte disfarçado', valor: 35 },
+          { id: crypto.randomUUID(), nome: 'Corte tesoura + máquina', valor: 40 },
+          { id: crypto.randomUUID(), nome: 'Barba', valor: 25 },
+          { id: crypto.randomUUID(), nome: 'Neviu', valor: 20 },
+          { id: crypto.randomUUID(), nome: 'Corte navalhado', valor: 45 },
+        ]);
+      }
+      if (!Storage.get(STORE_KEYS.VENDAS))  Storage.set(STORE_KEYS.VENDAS, []);
+      if (!Storage.get(STORE_KEYS.AGENDA))  Storage.set(STORE_KEYS.AGENDA, []);
+      if (!Storage.get(STORE_KEYS.CLOSURES)) Storage.set(STORE_KEYS.CLOSURES, []);
+    }
+
+    // =================== TABS ===================
+    function activateTab(key){
+      if (isMaster && !activeTenantId && key !== 'admin'){
+        toast('Selecione um cliente na aba Admin.');
+        key = 'admin';
+      }
+      if (!isMaster && key === 'admin'){
+        toast('Acesso restrito ao master.');
+        key = 'agendar';
+      }
+      els('section[id^="tab-"]').forEach(s=>s.classList.add('hidden'));
+      el('#tab-' + key)?.classList.remove('hidden');
+      els('.tab-btn').forEach(b=>{
+        const active = b.dataset.tab === key;
+        b.classList.toggle('opacity-100', active);
+        b.classList.toggle('opacity-70', !active);
+      });
+      if (key === 'relatorios') renderRelatorios();
+      if (key === 'registrar')  renderVendas();
+      if (key === 'agendar'){   renderAgenda(); renderBookingInbox(); }
+      if (key === 'config')     renderConfig();
+      if (key === 'admin')      renderAdmin();
+      if (key === 'caixa')      renderCaixa();
+    }
+
+    // =================== RENDER SELECTS ===================
+    async function fillSelects(){
+      const aplicarNaUI = (barbs, servs) => {
+        ['#ag-barbeiro','#vd-barbeiro'].forEach(id=>{
+          const s = el(id);
+          if (s) s.innerHTML = (barbs||[]).map(b=>`<option value="${b.id}">${b.nome}</option>`).join('');
+        });
+        ['#ag-servico','#vd-servico'].forEach(id=>{
+          const s = el(id);
+          if (s) s.innerHTML = (servs||[]).map(v=>`<option value="${v.id}">${v.nome} (${brl(v.valor)})</option>`).join('');
+        });
+      };
+
+      const aplicarLocal = ()=>{
+        const barbs = Storage.get(STORE_KEYS.BARBEIROS, []);
+        const servs = Storage.get(STORE_KEYS.SERVICOS, []);
+        aplicarNaUI(barbs, servs);
+      };
+
+      if (!supabase) { aplicarLocal(); return; }
+
+      // BARBEIROS
+      let barbsData, e1;
+      try{
+        ({ data: barbsData, error: e1 } = await withTenant(
+          sb().from('profiles').select('id, name').eq('role','barber').order('name')
+        ));
+        if (e1) {
+          const r = await sb().from('profiles').select('id, name').eq('role','barber').order('name');
+          barbsData = r.data; e1 = r.error;
+        }
+      }catch(err){
+        console.error(err);
+        aplicarLocal(); return;
+      }
+      if (e1) { console.error(e1); aplicarLocal(); return; }
+      const barbs = (barbsData||[]).map(b=>({ id:b.id, nome:b.name }));
+
+      // SERVIÇOS
+      const { data: servData, error: e2 } = await withTenant(
+        sb().from('services').select('id, name, price').order('name')
+      );
+      if (e2) { console.error(e2); aplicarLocal(); return; }
+      const servs = (servData||[]).map(s=>({ id:s.id, nome:s.name, valor:s.price }));
+
+      // espelha no local
+      Storage.set(STORE_KEYS.BARBEIROS, barbs);
+      Storage.set(STORE_KEYS.SERVICOS, servs);
+      aplicarNaUI(barbs, servs);
+    }
+
+    // =================== AGENDA ===================
+    async function renderAgenda(){
+      const lista = el('#lista-agenda'); if (!lista) return;
+
+      let items = [];
+      if (supabase){
+        const { data, error } = await withTenant(
+          sb().from('appointments')
+            .select('id, starts_at, customer_name, barber_id, service_id, notes, status')
+            .neq('status','done')
+            .order('starts_at',{ascending:true})
+        );
+        if (error){ console.error(error); return; }
+        items = (data||[]).map(a=>({
+          id:a.id,
+          data:a.starts_at,
+          cliente:a.customer_name,
+          barbeiro:a.barber_id,
+          servico:a.service_id,
+          obs:a.notes||''
+        }));
+      } else {
+        items = [...Storage.get(STORE_KEYS.AGENDA, [])]
+          .sort((a,b)=>new Date(a.data)-new Date(b.data));
+      }
+
+      el('#ag-count').textContent = `${items.length} agendamentos`;
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      lista.innerHTML = items.map(a=>{
+        const when = new Date(a.data).toLocaleString('pt-BR');
+        return `<div class="p-3 flex items-start justify-between">
+          <div>
+            <div class="font-medium">${a.cliente || '—'} • ${servs[a.servico]?.nome || '—'}</div>
+            <div class="text-xs text-yellow-200/80">${when} — ${barbs[a.barbeiro]?.nome || '—'}</div>
+            ${a.obs?`<div class="text-xs mt-1">${a.obs}</div>`:''}
+          </div>
+          <div class="flex gap-2">
+            <button data-id="${a.id}" class="ag-concluir text-sm px-2 py-1 rounded btn-yellow">Concluir</button>
+            <button data-id="${a.id}" class="ag-del text-sm px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Excluir</button>
+          </div>
+        </div>`;
+      }).join('') || `<div class="p-3 text-sm opacity-70">Sem agendamentos.</div>`;
+    }
+
+    // SALVAR agendamento (form-agenda)
+    el('#form-agenda')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const data    = el('#ag-data').value;
+      const cliente = el('#ag-cliente').value.trim();
+      const barbeiro= el('#ag-barbeiro').value;
+      const servico = el('#ag-servico').value;
+      const obs     = el('#ag-obs').value.trim();
+      if(!data || !cliente) return;
+
+      if (supabase){
+        const payload = {
+          starts_at: new Date(data).toISOString(),
+          customer_name: cliente,
+          barber_id: barbeiro,
+          service_id: servico,
+          notes: obs || null,
+          status: 'scheduled',
+          salon_id: activeTenantId
+        };
+        const { error } = await sb().from('appointments').insert(payload);
+        if (error){ console.error(error); toast('Erro ao salvar agendamento.'); return; }
+        e.target.reset();
+        await renderAgenda();
+        toast('Agendamento salvo!');
+      } else {
+        Storage.push(STORE_KEYS.AGENDA, {
+          id: crypto.randomUUID(),
+          data, cliente, barbeiro, servico, obs
+        });
+        e.target.reset();
+        renderAgenda();
+        toast('Agendamento salvo!');
+      }
+    });
+
+    document.getElementById('btn-clear-agenda')?.addEventListener('click', ()=>{
+      document.getElementById('form-agenda')?.reset();
+    });
+
+    // CONCLUIR / EXCLUIR agendamentos
+    el('#lista-agenda')?.addEventListener('click', async (e)=>{
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      if (!id) return;
+
+      if (btn.classList.contains('ag-concluir')){
+        if (supabase){
+          const { error } = await withTenant(
+            sb().from('appointments').update({ status: 'done' }).eq('id', id)
+          );
+          if (error){ console.error(error); toast('Erro ao concluir.'); return; }
+        } else {
+          const itens = Storage.get(STORE_KEYS.AGENDA, []);
+          Storage.set(STORE_KEYS.AGENDA, itens.filter(a=>a.id!==id));
+        }
+        await renderAgenda();
+        toast('Agendamento concluído.');
+      }
+
+      if (btn.classList.contains('ag-del')){
+        if (supabase){
+          const { error } = await withTenant(
+            sb().from('appointments').delete().eq('id', id)
+          );
+          if (error){ console.error(error); toast('Erro ao excluir.'); return; }
+        } else {
+          const itens = Storage.get(STORE_KEYS.AGENDA, []);
+          Storage.set(STORE_KEYS.AGENDA, itens.filter(a=>a.id!==id));
+        }
+        await renderAgenda();
+        toast('Agendamento excluído.');
+      }
+    });
+
+    // =================== REGISTRAR / VENDAS ===================
+    function renderVendas(){
+      const vendas = [...Storage.get(STORE_KEYS.VENDAS, [])].sort((a,b)=>b.data.localeCompare(a.data));
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, [])); const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      const box = el('#lista-vendas'); if (!box) return;
+      box.innerHTML = vendas.map(v=>`
+        <div class="p-3 flex items-center justify-between">
+          <div>
+            <div class="font-medium">${servs[v.servico]?.nome || '—'} — ${brl(v.valor)}</div>
+            <div class="text-xs text-yellow-200/80">${fmtDate(v.data)} • ${barbs[v.barbeiro]?.nome || '—'} • ${v.pagamento.toUpperCase()}</div>
+          </div>
+          <button data-id="${v.id}" class="vd-del text-sm px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Excluir</button>
+        </div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas registradas.</div>`;
+    }
+
+    el('#form-venda')?.addEventListener('submit', e=>{
+      e.preventDefault(); const data = el('#vd-data').value; const barbeiro = el('#vd-barbeiro').value; const servico = el('#vd-servico').value; const pagamento = el('#vd-pag').value;
+      let valor = parseFloat(el('#vd-valor').value); if (isNaN(valor)){ const serv = Storage.get(STORE_KEYS.SERVICOS, []).find(s=>s.id===servico); valor = serv?.valor || 0; }
+      Storage.push(STORE_KEYS.VENDAS, { id: crypto.randomUUID(), data, barbeiro, servico, pagamento, valor });
+      e.target.reset(); renderVendas(); toast('Venda registrada!');
+    });
+
+    el('#lista-vendas')?.addEventListener('click', e=>{
+      const btn = e.target.closest('button'); if (!btn) return; const id = btn.getAttribute('data-id');
+      const vendas = Storage.get(STORE_KEYS.VENDAS, []); Storage.set(STORE_KEYS.VENDAS, vendas.filter(v=>v.id!==id)); renderVendas(); toast('Venda excluída.');
+    });
+
+    function downloadText(filename, text){
+      const blob = new Blob(["\ufeff"+text], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }
+    el('#btn-exportar')?.addEventListener('click', ()=>{ exportCurrentCSV(); });
+
+    function exportCurrentCSV(){
+      const vendas = Storage.get(STORE_KEYS.VENDAS, []); const csv = ['id,data,barbeiro,servico,pagamento,valor'];
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, [])); const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      vendas.forEach(v=>{
+        const row = [
+          v.id,
+          v.data,
+          barbs[v.barbeiro]?.nome || '',
+          servs[v.servico]?.nome || '',
+          v.pagamento,
+          v.valor
+        ].map(s=>`"${String(s).replaceAll('"','""')}"`).join(',');
+        csv.push(row);
+      });
+      downloadText((isMaster?`vendas_${activeTenantId}`:'vendas')+'.csv', csv.join('\n'));
+    }
+
+    // =================== RELATÓRIOS ===================
+    function renderRelatorios(){
+      const vendas = Storage.get(STORE_KEYS.VENDAS, []);
+      const mesSel = el('#rl-mes').value || new Date().toISOString().slice(0,7); if (!el('#rl-mes').value) el('#rl-mes').value = mesSel;
+      const [yy,mm] = mesSel.split('-').map(Number); const de = new Date(yy, mm-1, 1); const ate = new Date(yy, mm, 1);
+      const vendasMes = vendas.filter(v=>{ const d = new Date(v.data + 'T00:00:00'); return d >= de && d < ate; });
+      const totalCortes = vendasMes.length; const faturamento = vendasMes.reduce((s,v)=>s+Number(v.valor||0),0);
+      el('#kpi-total-cortes').textContent = totalCortes; el('#kpi-faturamento').textContent = brl(faturamento);
+      const porBarbeiro = groupCountSum(vendasMes, 'barbeiro'); const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+      el('#rl-barbeiro').innerHTML = Object.entries(porBarbeiro).map(([id,obj])=>`<div class="flex justify-between"><span>${barbs[id]?.nome || '—'}</span><span>${obj.count} • ${brl(obj.sum)}</span></div>`).join('') || '<div class="text-sm opacity-70">Sem dados.</div>';
+      const top = Object.entries(porBarbeiro).sort((a,b)=>b[1].count-a[1].count)[0]; el('#kpi-top-barbeiro').textContent = top ? (barbs[top[0]]?.nome || '—') : '—';
+      const porPag = groupCountSum(vendasMes, 'pagamento');
+      el('#rl-pagamento').innerHTML = Object.entries(porPag).map(([k,o])=>`<div class="flex justify-between"><span>${k.toUpperCase()}</span><span>${o.count} • ${brl(o.sum)}</span></div>`).join('') || '<div class="text-sm opacity-70">Sem dados.</div>';
+      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      el('#rl-tabela').innerHTML = vendasMes.map(v=>`<div class="px-3 py-2 text-sm flex items-center justify-between"><div>${fmtDate(v.data)} — ${servs[v.servico]?.nome || '—'}</div><div class="text-yellow-200/80">${v.pagamento.toUpperCase()}</div><div class="font-medium">${brl(v.valor)}</div></div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas neste mês.</div>`;
+      renderServicosSidebar();
+    }
+    el('#btn-aplicar-filtro')?.addEventListener('click', renderRelatorios);
+    el('#btn-print')?.addEventListener('click', ()=>window.print());
+    function renderServicosSidebar(){ const servs = Storage.get(STORE_KEYS.SERVICOS, []); el('#servicos-list').innerHTML = servs.map(s=>`<div class="flex items-center justify-between text-sm"><span>${s.nome}</span><span class="font-medium">${brl(s.valor)}</span></div>`).join('') || '<div class="text-sm opacity-70">Sem serviços.</div>'; }
+
+    // =================== CONFIG ===================
+    function renderConfig(){
+      const barbs = Storage.get(STORE_KEYS.BARBEIROS, []);
+      el('#lista-barbeiros').innerHTML = barbs.map(b=>`<li class="flex items-center justify-between border border-yellow-500/20 rounded px-2 py-1"><span>${b.nome}</span><button data-id="${b.id}" class="bb-del text-xs px-2 py-0.5 rounded border border-yellow-500/40 text-yellow-300">Remover</button></li>`).join('');
+      const servs = Storage.get(STORE_KEYS.SERVICOS, []);
+      el('#lista-servicos').innerHTML = servs.map(s=>`<li class="flex items-center justify-between border border-yellow-500/20 rounded px-2 py-1"><span>${s.nome} — <strong>${brl(s.valor)}</strong></span><button data-id="${s.id}" class="sv-del text-xs px-2 py-0.5 rounded border border-yellow-500/40 text-yellow-300">Remover</button></li>`).join('');
+    }
+
+    el('#form-barbeiro')?.addEventListener('submit', e=>{
+      e.preventDefault(); const nome = el('#novo-barbeiro').value.trim(); if(!nome) return; const list = Storage.get(STORE_KEYS.BARBEIROS, []); list.push({ id: crypto.randomUUID(), nome }); Storage.set(STORE_KEYS.BARBEIROS, list); el('#novo-barbeiro').value = ''; fillSelects(); renderConfig(); toast('Barbeiro adicionado.');
+    });
+
+    el('#lista-barbeiros')?.addEventListener('click', e=>{
+      const id = e.target?.getAttribute('data-id'); if (!id) return;
+      const list = Storage.get(STORE_KEYS.BARBEIROS, []).filter(b=>b.id!==id);
+      Storage.set(STORE_KEYS.BARBEIROS, list);
+      fillSelects(); renderConfig(); toast('Barbeiro removido.');
+    });
+
+    el('#form-servico')?.addEventListener('submit', e=>{
+      e.preventDefault(); const nome = el('#sv-nome').value.trim(); const valor = parseFloat(el('#sv-valor').value); if(!nome || isNaN(valor)) return; const list = Storage.get(STORE_KEYS.SERVICOS, []); list.push({ id: crypto.randomUUID(), nome, valor }); Storage.set(STORE_KEYS.SERVICOS, list); el('#sv-nome').value = ''; el('#sv-valor').value=''; fillSelects(); renderConfig(); renderServicosSidebar(); toast('Serviço salvo.');
+    });
+    el('#lista-servicos')?.addEventListener('click', e=>{ const id = e.target?.getAttribute('data-id'); if (!id) return; const list = Storage.get(STORE_KEYS.SERVICOS, []).filter(s=>s.id!==id); Storage.set(STORE_KEYS.SERVICOS, list); fillSelects(); renderConfig(); renderServicosSidebar(); toast('Serviço removido.'); });
+
+    // =================== ADMIN ===================
+    function renderAdmin(){
+      const box = el('#tenants-list'); if (!box) return;
+      const items = loadTenants();
+      box.innerHTML = items.map(t=>`
+        <div class="border border-yellow-500/20 rounded p-2 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">${t.nome}</div>
+            <div class="text-xs text-yellow-200/70">ID: ${t.id}</div>
+          </div>
+          <div class="flex gap-2">
+            <button data-id="${t.id}" class="tn-enter px-2 py-1 rounded btn-yellow">Entrar como</button>
+            <button data-id="${t.id}" class="tn-export px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Exportar CSV</button>
+            <button data-id="${t.id}" class="tn-reset px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Reset</button>
+            <button data-id="${t.id}" class="tn-del px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Remover</button>
+          </div>
+        </div>`).join('') || '<div class="text-sm opacity-70">Nenhum cliente cadastrado.</div>';
+    }
+
+    el('#form-tenant')?.addEventListener('submit', e=>{
+      e.preventDefault(); const nome = el('#tn-nome').value.trim(); let id = el('#tn-id').value.trim(); if(!nome) return;
+      if (!id){ id = `${slugify(nome)}-${randomId(5)}`; }
+      const list = loadTenants(); if (list.some(x=>x.id===id)){ toast('ID já existe. Escolha outro.'); return; }
+      list.push({ id, nome }); saveTenants(list); el('#tn-nome').value=''; el('#tn-id').value=''; renderAdmin(); toast('Cliente adicionado.');
+    });
+
+    el('#tenants-list')?.addEventListener('click', (e)=>{
+      const id = e.target.getAttribute('data-id'); if (!id) return;
+      const list = loadTenants(); const t = list.find(x=>x.id===id);
+      if (e.target.classList.contains('tn-enter')){ setActiveTenant(t.id, t.nome); activateTab('agendar'); }
+      if (e.target.classList.contains('tn-export')){ const oldId = activeTenantId, oldName = activeTenantName; setActiveTenant(t.id, t.nome); exportCurrentCSV(); setActiveTenant(oldId, oldName); }
+      if (e.target.classList.contains('tn-reset')){ if (!confirm('Apagar TODOS os dados locais deste cliente?')) return; const keys = Object.values(STORE_KEYS).map(k=>`bb_${t.id}_${k}`); keys.forEach(k=>localStorage.removeItem(k)); toast('Dados do cliente apagados.'); }
+      if (e.target.classList.contains('tn-del')){ if (!confirm('Remover cliente da lista (não apaga dados automaticamente)?')) return; const nl = list.filter(x=>x.id!==id); saveTenants(nl); if (activeTenantId===id){ activeTenantId=null; activeTenantName=null; applyRoleUI(); } renderAdmin(); toast('Cliente removido.'); }
+    });
+
+    // NOVO (Admin: criar usuário)
+    el('#form-create-user')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      if (!supabase){ toast('Conecte o Supabase nas Configurações.'); return; }
+      if (!isMaster){ toast('Somente master pode criar usuários.'); return; }
+      if (!activeTenantId){ toast('Selecione um cliente antes.'); return; }
+      const name = el('#cu-name').value.trim();
+      const email = el('#cu-email').value.trim();
+      const pass  = el('#cu-pass').value;
+      const role  = el('#cu-role').value;
+
+      const msgBox = el('#cu-msg');
+      msgBox.textContent = 'Criando usuário...';
+
+      try{
+        const { error } = await supabase.auth.signUp({
+          email,
+          password: pass,
+          options: {
+            emailRedirectTo: `${window.location.origin}/#`,
+            data: {
+              role,                         // 'manager' | 'barber'
+              display_name: name || null,
+              salon_id: activeTenantId,     // vínculo ao cliente
+              salon_name: activeTenantName
+            }
+          }
+        });
+        if (error){ msgBox.textContent = 'Erro: ' + error.message; return; }
+        msgBox.textContent = 'Usuário criado! O e-mail de confirmação foi enviado.';
+        e.target.reset();
+      }catch(err){
+        console.error(err);
+        msgBox.textContent = 'Falha inesperada ao criar usuário.';
+      }
+    });
+    // /NOVO
+
+    // =================== BOOKING INBOX (appointment_requests) ===================
+    async function renderBookingInbox(){
+      const box = document.getElementById('booking-inbox');
+      if (!box) return;
+
+      if (!supabase){
+        box.innerHTML = `<div class="p-3 text-sm opacity-70">Conecte ao Supabase para receber solicitações externas.</div>`;
+        document.getElementById('rq-count').textContent = '';
+        return;
+      }
+
+      const { data, error } = await withTenant(
+        sb().from('appointment_requests')
+          .select('id, starts_at, customer_name, phone, barber_id, service_id, notes, status, salon_id')
+          .eq('status','pending')
+          .order('starts_at', { ascending:true })
+      );
+      if (error){ console.error(error); return; }
+
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      document.getElementById('rq-count').textContent = `${data?.length||0} pendentes`;
+
+      box.innerHTML = (data||[]).map(rq=>{
+        const when = rq.starts_at ? new Date(rq.starts_at).toLocaleString('pt-BR') : '—';
+        return `
+        <div class="p-3">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-medium">${rq.customer_name} ${rq.phone?`• <span class="text-yellow-200/80">${rq.phone}</span>`:''}</div>
+              <div class="text-xs text-yellow-200/80">${when} — ${servs[rq.service_id]?.nome || 'Serviço'} — ${barbs[rq.barber_id]?.nome || 'Barbeiro'}</div>
+              ${rq.notes?`<div class="text-xs mt-1">${rq.notes}</div>`:''}
+            </div>
+            <div class="flex gap-2">
+              <button class="rq-approve btn-yellow text-sm px-2 py-1 rounded" data-id="${rq.id}">Aprovar</button>
+              <button class="rq-reject text-sm px-2 py-1 rounded border border-yellow-500/40 text-yellow-300" data-id="${rq.id}">Recusar</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') || `<div class="p-3 text-sm opacity-70">Nenhuma solicitação pendente.</div>`;
+    }
+
+    document.getElementById('booking-inbox')?.addEventListener('click', async (e)=>{
+      const btn = e.target.closest('button'); if (!btn) return;
+      const id = btn.getAttribute('data-id'); if (!id) return;
+
+      if (btn.classList.contains('rq-approve')){
+        const { data: rows, error } = await sb().from('appointment_requests').select('*').eq('id', id).single();
+        if (error){ console.error(error); toast('Erro ao carregar solicitação.'); return; }
+
+        const payload = {
+          starts_at: rows.starts_at,
+          customer_name: rows.customer_name,
+          barber_id: rows.barber_id,
+          service_id: rows.service_id,
+          notes: rows.notes || null,
+          status: 'scheduled',
+          salon_id: rows.salon_id || activeTenantId
+        };
+        const { error: e1 } = await sb().from('appointments').insert(payload);
+        if (e1){ console.error(e1); toast('Erro ao aprovar.'); return; }
+
+        const { error: e2 } = await sb().from('appointment_requests').update({ status:'approved' }).eq('id', id);
+        if (e2){ console.error(e2); }
+
+        await renderBookingInbox();
+        await renderAgenda();
+        toast('Solicitação aprovado!');
+      }
+
+      if (btn.classList.contains('rq-reject')){
+        const { error } = await sb().from('appointment_requests').update({ status:'rejected' }).eq('id', id);
+        if (error){ console.error(error); toast('Erro ao recusar.'); return; }
+        await renderBookingInbox();
+        toast('Solicitação recusada.');
+      }
+    });
+
+    // =================== REALTIME ===================
+    let __rtChannel = null;
+    function setupRealtime(){
+      if (!supabase) return;
+
+      if (__rtChannel){
+        try{ supabase.removeChannel(__rtChannel); }catch(_){ }
+        __rtChannel = null;
+      }
+
+      __rtChannel = supabase.channel('realtime-booking')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointment_requests' }, (payload)=>{
+          if (!activeTenantId || payload.new?.salon_id === activeTenantId) renderBookingInbox();
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'appointment_requests' }, (payload)=>{
+          if (!activeTenantId || payload.new?.salon_id === activeTenantId) renderBookingInbox();
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, (payload)=>{
+          if (!activeTenantId || payload.new?.salon_id === activeTenantId) renderAgenda();
+        })
+        // NOVO: realtime para fechamentos de caixa
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'caixa_fechamentos' }, (payload)=>{
+          if (!activeTenantId || payload.new?.salon_id === activeTenantId) {
+            // Atualiza a UI do caixa; mantém histórico local como está
+            renderCaixa();
+            toast('Novo fechamento recebido (realtime).');
+          }
+        })
+        .subscribe();
+    }
+
+    // =================== CAIXA (NOVO) ===================
+    function renderCaixa(){
+      // migra dados antigos -> escopo atual, se as funções existirem
+      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
+      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+
+      const inp = el('#cx-data');
+      if (inp && !inp.value) inp.value = new Date().toISOString().slice(0,10);
+      const sel = inp?.value || new Date().toISOString().slice(0,10);
+
+      const vendas = Storage.get(STORE_KEYS.VENDAS, []);
+      const dia = vendas.filter(v => v.data === sel);
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+
+      const tot = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
+      el('#cx-total-dia').textContent = brl(tot);
+      el('#cx-qtde').textContent = String(dia.length);
+
+      // Top barbeiro
+      const porBarb = groupCountSum(dia, 'barbeiro');
+      const top = Object.entries(porBarb).sort((a,b)=> b[1].count - a[1].count)[0];
+      el('#cx-top-barbeiro').textContent = top ? (barbs[top[0]]?.nome || '—') : '—';
+
+      // Totais por pagamento
+      const somaPix = sumWhere(dia, v=>v.pagamento==='pix');
+      const somaDeb = sumWhere(dia, v=>v.pagamento==='debito');
+      const somaCre = sumWhere(dia, v=>v.pagamento==='credito');
+      const somaDin = sumWhere(dia, v=>v.pagamento==='dinheiro');
+      el('#cx-pix').textContent = brl(somaPix);
+      el('#cx-debito').textContent = brl(somaDeb);
+      el('#cx-credito').textContent = brl(somaCre);
+      el('#cx-dinheiro').textContent = brl(somaDin);
+
+      // Tabela do dia
+      el('#cx-tabela').innerHTML = dia.map(v=>`
+        <div class="px-3 py-2 text-sm flex items-center justify-between">
+          <div>${fmtDate(v.data)} — ${servs[v.servico]?.nome || '—'} (${barbs[v.barbeiro]?.nome || '—'})</div>
+          <div class="text-yellow-200/80">${v.pagamento.toUpperCase()}</div>
+          <div class="font-medium">${brl(v.valor)}</div>
+        </div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas neste dia.</div>`;
+
+      // Histórico de fechamentos (local)
+      const hist = Storage.get(STORE_KEYS.CLOSURES, []).slice().reverse();
+      el('#cx-historico').innerHTML = hist.map(c => {
+        return `<div class="border border-yellow-500/20 rounded p-2 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">${c.nomeCliente || 'Cliente'} – ${c.dataCaixa}</div>
+            <div class="text-xs text-yellow-200/80">Total: ${brl(c.total)} | PIX ${brl(c.pix)} • Déb ${brl(c.debito)} • Créd ${brl(c.credito)} • Din ${brl(c.dinheiro)}</div>
+          </div>
+          <div class="flex gap-2">
+            <button data-id="${c.id}" class="cx-print text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Imprimir</button>
+            <button data-id="${c.id}" class="cx-del text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Apagar</button>
+          </div>
+        </div>`;
+      }).join('') || '<div class="text-sm opacity-70">Sem fechamentos salvos.</div>';
+    }
+
+    // NOVO: util para buscar salon_id do perfil
+    async function getMySalonIdFromProfiles() {
+      const { data: { user } } = await sb().auth.getUser();
+      if (!user) throw new Error('Sem usuário');
+      const { data, error } = await sb()
+        .from('profiles')
+        .select('salon_id')
+        .eq('id', user.id)
+        .single();
+      if (error) throw error;
+      return data.salon_id;
+    }
+
+    // NOVO: salvar fechamento no Supabase
+    async function salvarFechamentoNoSupabase(closure) {
+      if (!supabase) return null;
+
+      const { data: { user } } = await sb().auth.getUser();
+      if (!user) throw new Error('Sem usuário autenticado');
+
+      const salonId = await getMySalonIdFromProfiles();
+      if (!salonId) throw new Error('Perfil sem salon_id');
+
+      // dd/mm/yyyy -> yyyy-mm-dd
+      const dateIso = closure.dataCaixa.includes('/') ? closure.dataCaixa.split('/').reverse().join('-') : closure.dataCaixa;
+
+      const payload = {
+        salon_id: salonId,
+        operator_id: user.id,
+        operator_email: user.email,
+        date_yyyy_mm_dd: dateIso,
+        nome_cliente: closure.nomeCliente,
+        qtde: closure.qtde,
+        pix: closure.pix,
+        debito: closure.debito,
+        credito: closure.credito,
+        dinheiro: closure.dinheiro,
+        total: closure.total,
+        itens: closure.itens || []
+      };
+
+      const { data, error } = await sb()
+        .from('caixa_fechamentos')
+        .insert(payload)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+
+    el('#cx-atualizar')?.addEventListener('click', renderCaixa);
+
+    el('#cx-fechar')?.addEventListener('click', async ()=>{
+      const dataSel = el('#cx-data').value || new Date().toISOString().slice(0,10);
+      const vendas = Storage.get(STORE_KEYS.VENDAS, []);
+      const dia = vendas.filter(v => v.data === dataSel);
+      if (dia.length === 0){ toast('Sem vendas neste dia.'); return; }
+
+      // migra antes de gravar o fechamento
+      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
+      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+
+      const total = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
+      const closure = {
+        id: crypto.randomUUID(),
+        tenant: currentScope(), // usa sempre o escopo da barbearia
+        nomeCliente: isMaster
+          ? (activeTenantName || activeTenantId || 'Cliente')
+          : (__user?.user_metadata?.salon_name || 'Minha Barbearia'),
+        operador: __user?.email || 'anon',
+        geradoEm: new Date().toLocaleString('pt-BR'),
+        dataCaixa: fmtDate(dataSel),
+        qtde: dia.length,
+        pix: sumWhere(dia, v=>v.pagamento==='pix'),
+        debito: sumWhere(dia, v=>v.pagamento==='debito'),
+        credito: sumWhere(dia, v=>v.pagamento==='credito'),
+        dinheiro: sumWhere(dia, v=>v.pagamento==='dinheiro'),
+        total,
+        itens: dia
+      };
+
+      // Grava local (mantém cache/offline)
+      Storage.push(STORE_KEYS.CLOSURES, closure);
+      renderCaixa();
+
+      // Tenta gravar no Supabase
+      if (supabase) {
+        try {
+          await salvarFechamentoNoSupabase(closure);
+          toast('Caixa fechado e salvo no servidor! Abrindo impressão...');
+        } catch (err) {
+          console.error(err);
+          toast('Fechou local. Falha ao salvar no servidor.');
+        } finally {
+          printClosure(closure);
+        }
+      } else {
+        toast('Fechou apenas local (sem Supabase configurado).');
+        printClosure(closure);
+      }
+    });
+
+    document.getElementById('cx-historico')?.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button'); if (!btn) return; const id = btn.getAttribute('data-id');
+      const list = Storage.get(STORE_KEYS.CLOSURES, []);
+      const found = list.find(x=>x.id===id);
+      if (btn.classList.contains('cx-print') && found){ printClosure(found); }
+      if (btn.classList.contains('cx-del')){
+        const rest = list.filter(x=>x.id!==id); Storage.set(STORE_KEYS.CLOSURES, rest); renderCaixa(); toast('Fechamento removido.');
+      }
+    });
+
+    function printClosure(c){
+      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+      const area = el('#print-area');
+      area.classList.remove('hidden');
+      area.innerHTML = `
+        <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; padding: 24px; max-width: 800px; margin: 0 auto; color:#111;">
+          <h2 style="font-weight:700; font-size:20px; margin:0 0 4px;">Fechamento de Caixa — ${c.nomeCliente}</h2>
+          <div style="font-size:12px; color:#444; margin-bottom:12px;">Data do caixa: ${c.dataCaixa} • Operador: ${c.operador} • Gerado em: ${c.geradoEm}</div>
+          <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px;">
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">Total do dia</div>
+              <div style="font-size:22px; font-weight:700;">${brl(c.total)}</div>
+            </div>
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">Qtde de vendas</div>
+              <div style="font-size:22px; font-weight:700;">${c.qtde}</div>
+            </div>
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">PIX</div>
+              <div style="font-size:18px; font-weight:700;">${brl(c.pix)}</div>
+            </div>
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">Débito</div>
+              <div style="font-size:18px; font-weight:700;">${brl(c.debito)}</div>
+            </div>
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">Crédito</div>
+              <div style="font-size:18px; font-weight:700;">${brl(c.credito)}</div>
+            </div>
+            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
+              <div style="font-size:12px; color:#666;">Dinheiro</div>
+              <div style="font-size:18px; font-weight:700;">${brl(c.dinheiro)}</div>
+            </div>
+          </div>
+          <h3 style="margin:16px 0 8px; font-weight:700;">Vendas</h3>
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+              <tr>
+                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Serviço</th>
+                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Barbeiro</th>
+                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Pagamento</th>
+                <th style="text-align:right; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${c.itens.map(v=>`<tr>
+                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${servs[v.servico]?.nome || '—'}</td>
+                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${barbs[v.barbeiro]?.nome || '—'}</td>
+                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${v.pagamento.toUpperCase()}</td>
+                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px; text-align:right;">${brl(v.valor)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top:18px; font-size:11px; color:#666;">Navalha Digital — Fechamento de Caixa gerado automaticamente.</div>
+        </div>
+      `;
+      // Dispara impressão (o navegador permite "Salvar como PDF")
+      window.print();
+      // Opcional: esconder após impressão
+      setTimeout(()=>{ area.classList.add('hidden'); area.innerHTML=''; }, 300);
+    }
+
+    // =================== HELPERS ===================
+    function groupCountSum(arr, key){ return arr.reduce((acc,cur)=>{ const k = cur[key]; const v = Number(cur.valor||0); if (!acc[k]) acc[k] = { count:0, sum:0 }; acc[k].count++; acc[k].sum += v; return acc; }, {}); }
+    function keyBy(arr){ const map = {}; arr.forEach(x=>map[x.id] = x); return map; }
+    function fmtDate(isoYYYYMMDD){ const [y,m,d] = isoYYYYMMDD.split('-'); return `${d}/${m}/${y}`; }
+    function sumWhere(arr, pred){ return arr.filter(pred).reduce((s,v)=> s + Number(v.valor||0), 0); }
+
+    function refreshAll(){
+      fillSelects();
+      renderAgenda();
+      renderVendas();
+      renderRelatorios();
+      renderConfig();
+      renderBookingInbox();   // <--- inbox junto
+      renderCaixa();
+    }
+
+    // =================== INIT ===================
+    async function initAfterAuth(){
+      // rode as migrações ANTES do seed
+      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
+      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+
+      seed();
+      ensureDefaultTenantForMaster();
+      refreshAll();
+
+      if (!__tabsBound){
+        els('.tab-btn').forEach(b=>b.addEventListener('click', ()=>activateTab(b.dataset.tab)));
+        __tabsBound = true;
+      }
+      const vd = el('#vd-data'); if (vd) vd.value = new Date().toISOString().slice(0,10);
+
+      if (isMaster && !activeTenantId) activateTab('admin'); else activateTab('agendar');
+    }
+
+    // ======== Auth UI actions ========
+    document.getElementById('auth-form')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      if (!supabase){
+        document.getElementById('auth-msg').textContent =
+          'Cole a URL e a anon key nas Configurações e clique "Salvar e recarregar".';
+        return;
+      }
+      const email = document.getElementById('auth-email').value.trim(); const password = document.getElementById('auth-pass').value;
+      const msg = document.getElementById('auth-msg'); msg.textContent = 'Entrando...';
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error){ msg.textContent = 'Falha ao entrar: ' + error.message; return; }
+      msg.textContent = 'Ok!';
+    });
+
+    document.getElementById('btn-signup')?.addEventListener('click', async ()=>{
+      if (!supabase){
+        document.getElementById('auth-msg').textContent =
+          'Cole a URL e a anon key nas Configurações e clique "Salvar e recarregar".';
+        return;
+      }
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-pass').value;
+      const msg = document.getElementById('auth-msg');
+
+      // >>> validação simples de senha para evitar "Signup requires a valid password"
+      if (!password || password.length < 6){
+        msg.textContent = 'Informe uma senha com 6+ caracteres.';
+        return;
+      }
+
+      msg.textContent = 'Criando conta...';
+
+      // >>> inclui emailRedirectTo para produção (Netlify / domínio custom)
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/#`
+        }
+      });
+      if (error){ msg.textContent = 'Falha ao criar: ' + error.message; return; }
+
+      msg.textContent = 'Conta criada! Entrando...';
+      const { error: e2 } = await supabase.auth.signInWithPassword({ email, password });
+      if (e2){ msg.textContent = 'Criou mas não entrou: ' + e2.message; return; }
+
+      msg.textContent = 'Ok!';
+    });
+
+    document.getElementById('btn-logout')?.addEventListener('click', async ()=>{ if (!supabase) return; await supabase.auth.signOut(); });
+
+    // ======== Config Supabase (login screen) – se existir na página ========
+    document.getElementById('cfg-sb-save-auth')?.addEventListener('click', ()=>{
+      const u = el('#cfg-sb-url-auth').value.trim(); const k = el('#cfg-sb-anon-auth').value.trim();
+      if (!u || !k){ toast('Informe URL e anon key.'); return; }
+      localStorage.setItem('bb_cfg_supabase_url', u); localStorage.setItem('bb_cfg_supabase_anon', k); location.reload();
+    });
+    document.getElementById('cfg-sb-clear-auth')?.addEventListener('click', ()=>{
+      localStorage.removeItem('bb_cfg_supabase_url'); localStorage.removeItem('bb_cfg_supabase_anon'); toast('Config limpa.');
+    });
+
+    // ======== Config Supabase (Config tab) ========
+    document.getElementById('cfg-sb-save')?.addEventListener('click', ()=>{
+      const u = el('#cfg-sb-url').value.trim();
+      const k = el('#cfg-sb-anon').value.trim();
+      if (!u || !k){ toast('Informe URL e anon key.'); return; }
+      localStorage.setItem('bb_cfg_supabase_url', u);
+      localStorage.setItem('bb_cfg_supabase_anon', k);
+      location.reload();
+    });
+    document.getElementById('cfg-sb-clear')?.addEventListener('click', ()=>{
+      localStorage.removeItem('bb_cfg_supabase_url');
+      localStorage.removeItem('bb_cfg_supabase_anon');
+      toast('Config limpa. Recarregue a página.');
+    });
+
+    // =================== INICIALIZAÇÃO ===================
+    bootstrapAuth();
+  </script>
+</body>
+</html>
