@@ -15,7 +15,6 @@
     /* --- Force o papel em TODO o app --- */
     html, body { min-height: 100%; }
     body {
-      /* Se preferir, troque o caminho abaixo para o real do seu projeto */
       background: url("minha-imagem.png") repeat;
       background-repeat: repeat !important;
       background-size: 200px !important;
@@ -23,7 +22,7 @@
       color: #fefce8;
     }
 
-    /* Camada escura fixa, sem precisar de <div class="overlay"> */
+    /* Camada escura fixa */
     body::after {
       content: "";
       position: fixed;
@@ -33,18 +32,18 @@
       pointer-events: none;
     }
 
-    /* Garante que todo conteúdo fique acima do escurecido */
+    /* Conteúdo acima do overlay */
     #app, #auth-screen, header, main, section, footer {
       position: relative;
       z-index: 1;
     }
 
-    /* Cards e botões no tema */
+    /* Cards e botões */
     .card { background-color:#111827; color:#facc15; }
     .btn-yellow { background-color:#facc15; color:#111827; }
     .btn-yellow:hover { background-color:#eab308; }
 
-    /* Inputs dark bonitos */
+    /* Inputs dark */
     input, select, textarea{
       background-color:#0b1220 !important; border:1px solid #374151 !important;
       color:#e5e7eb !important; border-radius:.5rem; padding:.5rem .75rem;
@@ -67,7 +66,6 @@
 </head>
 
 <body class="text-gray-100">
-  <!-- === OVERLAY para aplicar o papel no app todo === -->
   <div class="overlay">
 
     <!-- ===================== AUTH SCREEN ===================== -->
@@ -112,7 +110,6 @@
       </header>
 
       <main class="max-w-6xl mx-auto p-4 space-y-6">
-        <!-- Avisos -->
         <div id="toast" class="hidden rounded-lg border border-yellow bg-black p-3 shadow text-yellow-400"></div>
 
         <!-- =================== AGENDA =================== -->
@@ -380,7 +377,6 @@
 
           <div id="tenants-list" class="space-y-2 mb-8"></div>
 
-          <!-- NOVO (Admin: criar usuário do cliente) -->
           <h3 class="font-semibold text-yellow-300 mt-4">Criar usuário para o cliente selecionado</h3>
           <p class="text-xs text-yellow-200/70 mb-2">O usuário receberá confirmação por e-mail. Ao entrar, já virá vinculado a este cliente e com o nível escolhido.</p>
           <form id="form-create-user" class="grid md:grid-cols-5 gap-2">
@@ -395,15 +391,13 @@
             <button class="px-3 py-2 rounded btn-yellow" type="submit">Criar usuário</button>
           </form>
           <div id="cu-msg" class="text-xs text-yellow-200/80 mt-1"></div>
-          <!-- /NOVO -->
         </section>
       </main>
 
       <footer class="text-center text-xs text-yellow-400 py-6">Navalha Digital – MVP Local First (LocalStorage). Versão 0.6 (Fechamento de Caixa + PDF + Booking Inbox + Realtime + Criação de Usuário por Admin)</footer>
     </div>
-  </div><!-- /overlay -->
+  </div>
 
-  <!-- ====== ÁREA DE IMPRESSÃO (preenchida dinamicamente para PDF) ====== -->
   <div id="print-area" class="hidden"></div>
 
   <script>
@@ -411,7 +405,6 @@
     const SUPABASE_URL  = "https://xvrfpciqnuzxfsaktlja.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2cmZwY2lxbnV6eGZzYWt0bGphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1NjI1NjYsImV4cCI6MjA3MTEzODU2Nn0.JBmK1MnM8-8mjKq5bLHOh-9alHGTpCiXtsZnC-uFGlc";
 
-    // E-mail(s) master:
     const MASTER_EMAILS = [ "jacivaldojr@gmail.com" ];
 
     function resolveSupabaseConfig(){
@@ -432,12 +425,11 @@
       }
     }
 
-    // Helpers Supabase
     function sb(){ if (!supabase) throw new Error('Supabase não configurado'); return supabase; }
     function withTenant(q){ return activeTenantId ? q.eq('salon_id', activeTenantId) : q; }
 
     // ========================= STATE =========================
-    let __user = null; // supabase user
+    let __user = null;
     let isMaster = false;
     let activeTenantId = null;
     let activeTenantName = null;
@@ -461,17 +453,17 @@
       computeRole();
       if (__user) showApp(); else hideApp();
       await initAfterAuth();
-      setupRealtime(); // <--- realtime
+      setupRealtime();
       supabase.auth.onAuthStateChange((_evt, session)=>{
         __user = session?.user || null;
         computeRole();
         if (__user) showApp(); else hideApp();
         initAfterAuth();
-        setupRealtime(); // <--- realtime após mudança de sessão
+        setupRealtime();
       });
     }
 
-    // ====================== TENANTS (apenas master) ======================
+    // ====================== TENANTS ======================
     const TENANTS_KEY = () => `bb_${__user?.id || 'anon'}_tenants`;
     function loadTenants(){ try{ return JSON.parse(localStorage.getItem(TENANTS_KEY())) || []; }catch(_){ return []; } }
     function saveTenants(list){ localStorage.setItem(TENANTS_KEY(), JSON.stringify(list)); }
@@ -483,7 +475,7 @@
       activeTenantId = id; activeTenantName = nome || id;
       localStorage.setItem('bb_master_last_tenant', id);
       applyRoleUI();
-      setupRealtime();      // <--- refaz a inscrição realtime ao trocar cliente
+      setupRealtime();
       refreshAll();
     }
 
@@ -506,12 +498,11 @@
       toast('Cliente padrão criado e selecionado para o master.');
     }
 
-    // ========================= ROLE / MASTER =========================
+    // ========================= ROLE =========================
     function computeRole(){
       const email = (__user?.email || '').toLowerCase();
       isMaster = !!email && MASTER_EMAILS.map(e=>e.toLowerCase()).includes(email);
 
-      // NOVO (user_metadata): se não for master, puxa tenant do user_metadata
       if (!isMaster && __user?.user_metadata){
         const meta = __user.user_metadata || {};
         if (meta.salon_id){ activeTenantId = meta.salon_id; activeTenantName = meta.salon_name || meta.salon_id; }
@@ -535,22 +526,15 @@
     const els = (sel, root=document) => Array.from(root.querySelectorAll(sel));
     function toast(msg){ const t = el('#toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 1600); }
 
-    // ===================== STORAGE (Local, por usuário/cliente) =====================
+    // ===================== STORAGE =====================
     const STORE_KEYS = { BARBEIROS: 'barbeiros', SERVICOS: 'servicos', VENDAS: 'vendas', AGENDA: 'agenda', CLOSURES: 'caixa' };
 
-    // >>>>>>> ESCOPO ATUAL (corrigido para usar salon_id)
     function currentScope(){
-      // Master continua por cliente selecionado
       if (isMaster) return activeTenantId || 'no-tenant';
-
-      // Usuário normal: escopo é a barbearia (salon_id)
       const salonId = __user?.user_metadata?.salon_id;
       if (salonId) return salonId;
-
-      // Fallback temporário
       return __user?.id || 'anon';
     }
-
     const scopeKey = (k) => `bb_${currentScope()}_${k}`;
 
     const Storage = {
@@ -560,7 +544,6 @@
       clear(){ Object.values(STORE_KEYS).forEach(k=>localStorage.removeItem(scopeKey(k))); }
     };
 
-    // ================== MIGRAÇÃO DE DADOS ANTIGOS ==================
     function migrateAnonToCurrentScope(){
       const curPrefix  = `bb_${currentScope()}_`;
       const anonPrefix = `bb_anon_`;
@@ -597,11 +580,9 @@
 
     // ====================== DADOS PADRÃO ======================
     function seed(){
-      // migra para o escopo atual antes de semear
       if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
       if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
-      // evita semear quando o master ainda não selecionou um cliente
       if (isMaster && !activeTenantId) return;
 
       if (!Storage.get(STORE_KEYS.BARBEIROS)){
@@ -671,14 +652,20 @@
 
       if (!supabase) { aplicarLocal(); return; }
 
-      // BARBEIROS
+      // BARBEIROS (tenta várias colunas de nome)
       let barbsData, e1;
       try{
         ({ data: barbsData, error: e1 } = await withTenant(
-          sb().from('profiles').select('id, name').eq('role','barber').order('name')
+          sb().from('profiles')
+            .select('id, name, full_name, display_name, role, salon_id')
+            .eq('role','barber')
+            .order('name', { ascending: true })
         ));
         if (e1) {
-          const r = await sb().from('profiles').select('id, name').eq('role','barber').order('name');
+          const r = await sb().from('profiles')
+            .select('id, name, full_name, display_name, role, salon_id')
+            .eq('role','barber')
+            .order('full_name', { ascending: true });
           barbsData = r.data; e1 = r.error;
         }
       }catch(err){
@@ -686,7 +673,7 @@
         aplicarLocal(); return;
       }
       if (e1) { console.error(e1); aplicarLocal(); return; }
-      const barbs = (barbsData||[]).map(b=>({ id:b.id, nome:b.name }));
+      const barbs = (barbsData||[]).map(b=>({ id:b.id, nome: b.name || b.full_name || b.display_name || 'Barbeiro' }));
 
       // SERVIÇOS
       const { data: servData, error: e2 } = await withTenant(
@@ -707,21 +694,42 @@
 
       let items = [];
       if (supabase){
+        // sem customer_name; usa customer_id
         const { data, error } = await withTenant(
           sb().from('appointments')
-            .select('id, starts_at, customer_name, barber_id, service_id, notes, status')
+            .select('id, starts_at, customer_id, barber_id, service_id, notes, status')
             .neq('status','done')
             .order('starts_at',{ascending:true})
         );
         if (error){ console.error(error); return; }
+
         items = (data||[]).map(a=>({
           id:a.id,
           data:a.starts_at,
-          cliente:a.customer_name,
+          customer_id:a.customer_id,
           barbeiro:a.barber_id,
           servico:a.service_id,
           obs:a.notes||''
         }));
+
+        // resolve nomes via profiles (opcional)
+        const idsPerfis = [...new Set(items.flatMap(i => [i.customer_id, i.barbeiro]).filter(Boolean))];
+        let nomePorId = {};
+        if (idsPerfis.length){
+          const { data: perfis, error: eP } = await sb().from('profiles')
+            .select('id, name, full_name, display_name')
+            .in('id', idsPerfis);
+          if (!eP && perfis){
+            nomePorId = Object.fromEntries(perfis.map(p=>[p.id, p.name || p.full_name || p.display_name || 'Usuário']));
+          }
+        }
+
+        items = items.map(i => ({
+          ...i,
+          cliente: nomePorId[i.customer_id] || '—',
+          barbeiroNome: nomePorId[i.barbeiro] || '—'
+        }));
+
       } else {
         items = [...Storage.get(STORE_KEYS.AGENDA, [])]
           .sort((a,b)=>new Date(a.data)-new Date(b.data));
@@ -732,10 +740,11 @@
       const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
       lista.innerHTML = items.map(a=>{
         const when = new Date(a.data).toLocaleString('pt-BR');
+        const barbNome = a.barbeiroNome || barbs[a.barbeiro]?.nome || '—';
         return `<div class="p-3 flex items-start justify-between">
           <div>
             <div class="font-medium">${a.cliente || '—'} • ${servs[a.servico]?.nome || '—'}</div>
-            <div class="text-xs text-yellow-200/80">${when} — ${barbs[a.barbeiro]?.nome || '—'}</div>
+            <div class="text-xs text-yellow-200/80">${when} — ${barbNome}</div>
             ${a.obs?`<div class="text-xs mt-1">${a.obs}</div>`:''}
           </div>
           <div class="flex gap-2">
@@ -746,11 +755,11 @@
       }).join('') || `<div class="p-3 text-sm opacity-70">Sem agendamentos.</div>`;
     }
 
-    // SALVAR agendamento (form-agenda)
+    // SALVAR agendamento
     el('#form-agenda')?.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const data    = el('#ag-data').value;
-      const cliente = el('#ag-cliente').value.trim();
+      const cliente = el('#ag-cliente').value.trim(); // usado apenas no local
       const barbeiro= el('#ag-barbeiro').value;
       const servico = el('#ag-servico').value;
       const obs     = el('#ag-obs').value.trim();
@@ -759,7 +768,7 @@
       if (supabase){
         const payload = {
           starts_at: new Date(data).toISOString(),
-          customer_name: cliente,
+          // customer_id: <UUID do cliente> (opcional se você ainda não tem)
           barber_id: barbeiro,
           service_id: servico,
           notes: obs || null,
@@ -786,7 +795,7 @@
       document.getElementById('form-agenda')?.reset();
     });
 
-    // CONCLUIR / EXCLUIR agendamentos
+    // CONCLUIR / EXCLUIR
     el('#lista-agenda')?.addEventListener('click', async (e)=>{
       const btn = e.target.closest('button');
       if (!btn) return;
@@ -958,7 +967,7 @@
       if (e.target.classList.contains('tn-del')){ if (!confirm('Remover cliente da lista (não apaga dados automaticamente)?')) return; const nl = list.filter(x=>x.id!==id); saveTenants(nl); if (activeTenantId===id){ activeTenantId=null; activeTenantName=null; applyRoleUI(); } renderAdmin(); toast('Cliente removido.'); }
     });
 
-    // NOVO (Admin: criar usuário)
+    // Criar usuário
     el('#form-create-user')?.addEventListener('submit', async (e)=>{
       e.preventDefault();
       if (!supabase){ toast('Conecte o Supabase nas Configurações.'); return; }
@@ -979,9 +988,9 @@
           options: {
             emailRedirectTo: `${window.location.origin}/#`,
             data: {
-              role,                         // 'manager' | 'barber'
+              role,
               display_name: name || null,
-              salon_id: activeTenantId,     // vínculo ao cliente
+              salon_id: activeTenantId,
               salon_name: activeTenantName
             }
           }
@@ -994,9 +1003,8 @@
         msgBox.textContent = 'Falha inesperada ao criar usuário.';
       }
     });
-    // /NOVO
 
-    // =================== BOOKING INBOX (appointment_requests) ===================
+    // =================== BOOKING INBOX ===================
     async function renderBookingInbox(){
       const box = document.getElementById('booking-inbox');
       if (!box) return;
@@ -1048,7 +1056,7 @@
 
         const payload = {
           starts_at: rows.starts_at,
-          customer_name: rows.customer_name,
+          // customer_id: rows.customer_id || null, // se sua tabela de requests tiver
           barber_id: rows.barber_id,
           service_id: rows.service_id,
           notes: rows.notes || null,
@@ -1099,7 +1107,6 @@
 
     // =================== CAIXA (NOVO) ===================
     function renderCaixa(){
-      // migra dados antigos -> escopo atual, se as funções existirem
       if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
       if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
@@ -1116,12 +1123,10 @@
       el('#cx-total-dia').textContent = brl(tot);
       el('#cx-qtde').textContent = String(dia.length);
 
-      // Top barbeiro
       const porBarb = groupCountSum(dia, 'barbeiro');
       const top = Object.entries(porBarb).sort((a,b)=> b[1].count - a[1].count)[0];
       el('#cx-top-barbeiro').textContent = top ? (barbs[top[0]]?.nome || '—') : '—';
 
-      // Totais por pagamento
       const somaPix = sumWhere(dia, v=>v.pagamento==='pix');
       const somaDeb = sumWhere(dia, v=>v.pagamento==='debito');
       const somaCre = sumWhere(dia, v=>v.pagamento==='credito');
@@ -1131,7 +1136,6 @@
       el('#cx-credito').textContent = brl(somaCre);
       el('#cx-dinheiro').textContent = brl(somaDin);
 
-      // Tabela do dia
       el('#cx-tabela').innerHTML = dia.map(v=>`
         <div class="px-3 py-2 text-sm flex items-center justify-between">
           <div>${fmtDate(v.data)} — ${servs[v.servico]?.nome || '—'} (${barbs[v.barbeiro]?.nome || '—'})</div>
@@ -1139,7 +1143,6 @@
           <div class="font-medium">${brl(v.valor)}</div>
         </div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas neste dia.</div>`;
 
-      // Histórico de fechamentos
       const hist = Storage.get(STORE_KEYS.CLOSURES, []).slice().reverse();
       el('#cx-historico').innerHTML = hist.map(c => {
         return `<div class="border border-yellow-500/20 rounded p-2 flex items-center justify-between">
@@ -1163,14 +1166,13 @@
       const dia = vendas.filter(v => v.data === dataSel);
       if (dia.length === 0){ toast('Sem vendas neste dia.'); return; }
 
-      // migra antes de gravar o fechamento
       if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
       if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
       const total = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
       const closure = {
         id: crypto.randomUUID(),
-        tenant: currentScope(), // usa sempre o escopo da barbearia
+        tenant: currentScope(),
         nomeCliente: isMaster
           ? (activeTenantName || activeTenantId || 'Cliente')
           : (__user?.user_metadata?.salon_name || 'Minha Barbearia'),
@@ -1259,9 +1261,7 @@
           <div style="margin-top:18px; font-size:11px; color:#666;">Navalha Digital — Fechamento de Caixa gerado automaticamente.</div>
         </div>
       `;
-      // Dispara impressão (o navegador permite "Salvar como PDF")
       window.print();
-      // Opcional: esconder após impressão
       setTimeout(()=>{ area.classList.add('hidden'); area.innerHTML=''; }, 300);
     }
 
@@ -1277,13 +1277,12 @@
       renderVendas();
       renderRelatorios();
       renderConfig();
-      renderBookingInbox();   // <--- inbox junto
+      renderBookingInbox();
       renderCaixa();
     }
 
     // =================== INIT ===================
     async function initAfterAuth(){
-      // rode as migrações ANTES do seed
       if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
       if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
@@ -1300,7 +1299,7 @@
       if (isMaster && !activeTenantId) activateTab('admin'); else activateTab('agendar');
     }
 
-    // ======== Auth UI actions ========
+    // ======== Auth UI ========
     document.getElementById('auth-form')?.addEventListener('submit', async (e)=>{
       e.preventDefault();
       if (!supabase){
@@ -1325,15 +1324,12 @@
       const password = document.getElementById('auth-pass').value;
       const msg = document.getElementById('auth-msg');
 
-      // >>> validação simples de senha para evitar "Signup requires a valid password"
       if (!password || password.length < 6){
         msg.textContent = 'Informe uma senha com 6+ caracteres.';
         return;
       }
 
       msg.textContent = 'Criando conta...';
-
-      // >>> inclui emailRedirectTo para produção (Netlify / domínio custom)
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -1352,17 +1348,7 @@
 
     document.getElementById('btn-logout')?.addEventListener('click', async ()=>{ if (!supabase) return; await supabase.auth.signOut(); });
 
-    // ======== Config Supabase (login screen) – se existir na página ========
-    document.getElementById('cfg-sb-save-auth')?.addEventListener('click', ()=>{
-      const u = el('#cfg-sb-url-auth').value.trim(); const k = el('#cfg-sb-anon-auth').value.trim();
-      if (!u || !k){ toast('Informe URL e anon key.'); return; }
-      localStorage.setItem('bb_cfg_supabase_url', u); localStorage.setItem('bb_cfg_supabase_anon', k); location.reload();
-    });
-    document.getElementById('cfg-sb-clear-auth')?.addEventListener('click', ()=>{
-      localStorage.removeItem('bb_cfg_supabase_url'); localStorage.removeItem('bb_cfg_supabase_anon'); toast('Config limpa.');
-    });
-
-    // ======== Config Supabase (Config tab) ========
+    // ======== Config Supabase ========
     document.getElementById('cfg-sb-save')?.addEventListener('click', ()=>{
       const u = el('#cfg-sb-url').value.trim();
       const k = el('#cfg-sb-anon').value.trim();
