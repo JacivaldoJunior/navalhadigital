@@ -158,27 +158,35 @@
       const { data: { session } } = await supabase.auth.getSession();
       __user = session?.user || null;
 
-      // ALTERADO: garantir profile universal no login
       if (__user) {
-        await ensureProfileUniversal(); // cria/atualiza profile p/ qualquer usuário
+        try {
+          await ensureProfileUniversal(); // cria/atualiza profile p/ qualquer usuário
+        } catch(e) {
+          console.warn('ensureProfileUniversal falhou (seguindo mesmo assim):', e);
+        }
       }
 
       computeRole();
       if (__user) showApp(); else hideApp();
       await initAfterAuth();
-      setupRealtime(); // booking + caixa
-      setupSalesRealtime(); // vendas realtime
+
+      if (typeof setupRealtime === 'function') { setupRealtime(); }
+      if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
 
       supabase.auth.onAuthStateChange(async (_evt, session)=>{
         __user = session?.user || null;
         if (__user) {
-          await ensureProfileUniversal();
+          try {
+            await ensureProfileUniversal();
+          } catch(e) {
+            console.warn('ensureProfileUniversal (onAuthStateChange) falhou:', e);
+          }
         }
         computeRole();
         if (__user) showApp(); else hideApp();
-        initAfterAuth();
-        setupRealtime();
-        setupSalesRealtime();
+        await initAfterAuth();
+        if (typeof setupRealtime === 'function') { setupRealtime(); }
+        if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
       });
     }
 
@@ -193,8 +201,8 @@
       activeTenantId = id; activeTenantName = nome || id;
       localStorage.setItem('bb_master_last_tenant', id);
       applyRoleUI();
-      setupRealtime();
-      setupSalesRealtime();
+      if (typeof setupRealtime === 'function') { setupRealtime(); }
+      if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
       refreshAll();
     }
 
@@ -324,13 +332,11 @@
     }
 
     // =================== FUNÇÕES UNIVERSAIS DE PROFILE ===================
-    // ALTERADO: solução para todos os usuários – garante profile + salon
     async function ensureProfileUniversal() {
       try {
-        const { data: { user } } = await sb().auth.getUser();
+        const { data: { user} } = await sb().auth.getUser();
         if (!user) return null;
 
-        // Verifica se já existe profile com user_id
         let { data: prof, error: pErr } = await sb()
           .from('profiles')
           .select('user_id, salon_id, full_name, role')
@@ -338,13 +344,9 @@
           .maybeSingle();
         if (pErr) throw pErr;
 
-        if (prof?.salon_id) return prof; // já está ok
+        if (prof?.salon_id) return prof;
 
-        // Se não existe, criamos um salon padrão para o usuário
-        // Você pode trocar por convite/seleção depois
         let salonId;
-        // Tenta achar algum salon existente do usuário (opcional)
-        // Caso não tenha tabela salons, pule a criação abaixo
         try {
           const { data: salon, error: sErr } = await sb()
             .from('salons')
@@ -358,16 +360,13 @@
           salonId = salon.id;
         } catch (e) {
           console.warn('Falha ao criar salon (ok se não existir tabela salons):', e?.message);
-          // fallback: gera um UUID local para manter consistência
-          // obs.: sem tabela salons, o valor só serve como chave do tenant
           salonId = crypto.randomUUID();
         }
 
-        // Upsert do profile (obrigatório para a RLS funcionar)
         const { error: upErr } = await sb()
           .from('profiles')
           .upsert({
-            user_id: user.id,                 // <- campo certo
+            user_id: user.id,
             salon_id: salonId,
             full_name: user.user_metadata?.display_name || '',
             role: 'manager'
@@ -381,35 +380,20 @@
       }
     }
 
-    // =================== TABS / RENDER (mesmo do seu código) ===================
-    // ... suas funções activateTab, fillSelects, renderAgenda etc. continuam iguais ...
-
     // ================ AJUSTES CRÍTICOS: VENDAS E CAIXA =================
-
-    // ALTERADO: buscar salon_id por profiles.user_id (não p.id)
     async function getSalonIdFromProfile() {
       const { data: { user } } = await sb().auth.getUser();
       if (!user) return null;
       const { data, error } = await sb()
         .from('profiles')
         .select('salon_id')
-        .eq('user_id', user.id)    // <- ALTERADO
+        .eq('user_id', user.id)
         .single();
       if (error) { console.error(error); return null; }
       return data?.salon_id || null;
     }
 
-    // ALTERADO: registrar venda já usa salon_id correto
-    async function registrarVenda({
-      salonId,
-      barberId = null,
-      customerName,
-      serviceName,
-      priceReais,
-      paymentType,
-      notes = '',
-      soldAt = new Date().toISOString(),
-    }) {
+    async function registrarVenda({ salonId, barberId=null, customerName, serviceName, priceReais, paymentType, notes='', soldAt=new Date().toISOString() }) {
       const price_cents = Math.round(Number(priceReais) * 100);
       const { data, error } = await sb()
         .from('sales')
@@ -443,16 +427,13 @@
       return data || [];
     }
 
-    // ... restante do bloco de VENDAS igual ao seu, chamando registrarVenda e listarVendasDoDiaServer ...
-
-    // ============== CAIXA: fechar e salvar com policies por user_id ============
     async function getMySalonIdFromProfiles() {
       const { data: { user } } = await sb().auth.getUser();
       if (!user) throw new Error('Sem usuário');
       const { data, error } = await sb()
         .from('profiles')
         .select('salon_id')
-        .eq('user_id', user.id)     // <- ALTERADO
+        .eq('user_id', user.id)
         .single();
       if (error) throw error;
       return data.salon_id;
@@ -465,7 +446,9 @@
       const salonId = await getMySalonIdFromProfiles();
       if (!salonId) throw new Error('Perfil sem salon_id');
 
-      const dateIso = closure.dataCaixa.includes('/') ? closure.dataCaixa.split('/').reverse().join('-') : closure.dataCaixa;
+      const dateIso = closure.dataCaixa?.includes('/')
+        ? closure.dataCaixa.split('/').reverse().join('-')
+        : closure.dataCaixa;
 
       const payload = {
         salon_id: salonId,
@@ -492,10 +475,6 @@
       return data;
     }
 
-    // =================== RESTO DO SEU CÓDIGO ORIGINAL ===================
-    // Mantive suas funções de UI, realtime, prints, helpers, auth UI e init.
-    // Para não alongar demais, o restante permanece igual ao que você enviou.
-
     // ======== Auth UI ========
     document.getElementById('auth-form')?.addEventListener('submit', async (e)=>{
       e.preventDefault();
@@ -504,8 +483,10 @@
           'Cole a URL e a anon key nas Configurações e clique "Salvar e recarregar".';
         return;
       }
-      const email = document.getElementById('auth-email').value.trim(); const password = document.getElementById('auth-pass').value;
-      const msg = document.getElementById('auth-msg'); msg.textContent = 'Entrando...';
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-pass').value;
+      const msg = document.getElementById('auth-msg');
+      msg.textContent = 'Entrando...';
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error){ msg.textContent = 'Falha ao entrar: ' + error.message; return; }
       msg.textContent = 'Ok!';
@@ -558,12 +539,12 @@
 
     // =================== INICIALIZAÇÃO ===================
     async function refreshAll(){
-      fillSelects();
-      renderAgenda();
-      renderVendas();
-      renderRelatorios();
-      renderBookingInbox();
-      renderCaixa();
+      fillSelects?.();
+      renderAgenda?.();
+      renderVendas?.();
+      renderRelatorios?.();
+      renderBookingInbox?.();
+      renderCaixa?.();
     }
 
     async function initAfterAuth(){
@@ -575,11 +556,11 @@
       refreshAll();
 
       if (!__tabsBound){
-        els('.tab-btn').forEach(b=>b.addEventListener('click', ()=>activateTab(b.dataset.tab)));
+        els('.tab-btn').forEach(b=>b.addEventListener('click', ()=>activateTab?.(b.dataset.tab)));
         __tabsBound = true;
       }
       const vd = el('#vd-data'); if (vd) vd.value = new Date().toISOString().slice(0,10);
-      if (isMaster && !activeTenantId) activateTab('admin'); else activateTab('agendar');
+      if (isMaster && !activeTenantId) activateTab?.('admin'); else activateTab?.('agendar');
     }
 
     bootstrapAuth();
