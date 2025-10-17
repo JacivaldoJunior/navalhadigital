@@ -1,569 +1,1048 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <title>Navalha Digital - MVP Barbearia (Login + Master) v0.8</title>
-
-  <!-- Tailwind + Supabase -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Navalha Digital - MVP Barbearia</title>
   <style>
-    html, body { min-height: 100%; }
+    :root {
+      --bg: #0b0f14;
+      --panel: #121824;
+      --panel-2: #0f1420;
+      --text: #e6edf3;
+      --muted: #9fb1c3;
+      --brand: #2ea043;
+      --brand-2: #238636;
+      --danger: #d73a49;
+      --warning: #f2cc60;
+      --border: #1f2a3a;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
     body {
-      background: url("minha-imagem.png") repeat;
-      background-repeat: repeat !important;
-      background-size: 200px !important;
-      background-color: #0a0a0a !important;
-      color: #fefce8;
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
     }
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.94);
-      z-index: 0;
-      pointer-events: none;
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .navbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
     }
-    #app, #auth-screen, header, main, section, footer { position: relative; z-index: 1; }
-    .card { background-color:#111827; color:#facc15; }
-    .btn-yellow { background-color:#facc15; color:#111827; }
-    .btn-yellow:hover { background-color:#eab308; }
-    input, select, textarea{
-      background-color:#0b1220 !important; border:1px solid #374151 !important;
-      color:#e5e7eb !important; border-radius:.5rem; padding:.5rem .75rem;
+    .brand { display: flex; gap: 10px; align-items: center; }
+    .brand h1 { margin: 0; font-size: 18px; }
+    .tenant-badge {
+      padding: 2px 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; font-size: 12px; color: var(--muted);
     }
-    input::placeholder, textarea::placeholder { color:#9ca3af !important; }
-    input:focus, select:focus, textarea:focus{
-      outline:none !important; border-color:#eab308 !important;
-      box-shadow:0 0 0 3px rgba(234,179,8,.25) !important;
+
+    .tabs {
+      display: flex; gap: 8px; padding: 8px 16px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
     }
-    @media print {
-      .no-print { display: none !important; }
-      body { background: #fff !important; }
-      body::after { display: none !important; }
-      #print-area { display: block !important; }
-      #app, header, main, footer { background: #fff !important; color: #111 !important; }
+    .tab {
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+      background: transparent; color: var(--text); font-size: 14px;
     }
+    .tab.active { background: var(--panel); }
+    .content { padding: 16px; }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 290px; }
+
+    .input, select, textarea {
+      width: 100%; padding: 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    }
+    label { display: block; margin-bottom: 6px; color: var(--muted); }
+    .btn {
+      display: inline-flex; gap: 8px; align-items: center;
+      padding: 10px 14px; background: var(--brand); border: 1px solid var(--brand-2); color: white; border-radius: 8px; cursor: pointer;
+    }
+    .btn:hover { background: var(--brand-2); }
+    .btn.secondary { background: var(--panel-2); border-color: var(--border); color: var(--text); }
+    .btn.danger { background: var(--danger); border-color: #ad2632; }
+    .btn.warning { background: var(--warning); color: #222; border-color: #d0b24a; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .list { display: grid; gap: 8px; }
+    .list-item { padding: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .online { background: #2ea043; }
+    .offline { background: #8b949e; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .kbd {
+      display:inline-block; padding: 2px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--panel-2); font-size: 12px; color: var(--muted);
+    }
+
+    .hr { height: 1px; background: var(--border); margin: 12px 0; border: none; }
+    .small { font-size: 12px; color: var(--muted); }
+    .right { text-align: right; }
+    .center { text-align: center; }
+
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-size: 12px; }
+    .tag { display:inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-size: 12px; }
+
+    .warning-box {
+      border: 1px solid #664d03; background: #2a1f02; color: #ffd666; padding: 10px; border-radius: 8px; font-size: 13px;
+    }
+
+    .ok-box {
+      border: 1px solid #1f6feb; background: #0d1117; color: #9cc2ff; padding: 10px; border-radius: 8px; font-size: 13px;
+    }
+
+    code.inline { background: #0d1117; padding: 2px 6px; border-radius: 6px; border: 1px solid #1f2a3a; }
   </style>
 </head>
-
-<body class="text-gray-100">
-  <div class="overlay">
-
-    <!-- ===================== AUTH SCREEN ===================== -->
-    <section id="auth-screen" class="min-h-[80vh] flex items-center justify-center p-4">
-      <div class="w-full max-w-md card rounded-2xl shadow border border-yellow-500/30 p-6">
-        <h1 class="text-2xl font-bold text-yellow-400 text-center">Navalha Digital</h1>
-        <p class="mt-1 text-center text-sm text-yellow-200/80">Acesse com seu e-mail e senha</p>
-        <form id="auth-form" class="mt-5 space-y-3">
-          <div>
-            <label class="block text-sm text-yellow-200">E-mail</label>
-            <input id="auth-email" type="email" placeholder="voce@exemplo.com" required class="w-full mt-1" />
-          </div>
-          <div>
-            <label class="block text-sm text-yellow-200">Senha</label>
-            <input id="auth-pass" type="password" placeholder="mín. 6 caracteres" minlength="6" required class="w-full mt-1" />
-          </div>
-          <div class="flex gap-2">
-            <button id="btn-signin" type="submit" class="btn-yellow px-4 py-2 rounded w-full">Entrar</button>
-            <button id="btn-signup" type="button" class="px-4 py-2 rounded w-full border border-yellow-500/40 text-yellow-300">Criar conta</button>
-          </div>
-          <div id="auth-msg" class="text-xs text-yellow-300"></div>
-        </form>
-      </div>
-    </section>
-
-    <!-- ===================== APP ===================== -->
-    <div id="app" class="hidden">
-      <header class="px-4 py-3 shadow border-b border-yellow-500/20">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-          <h1 class="text-xl font-bold text-yellow-400">Navalha Digital</h1>
-          <nav class="space-x-2 no-print flex items-center">
-            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="agendar">Agenda</button>
-            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="registrar">Registrar Corte</button>
-            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="caixa">Caixa</button>
-            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="relatorios">Relatórios</button>
-            <button class="tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="config">Configurações</button>
-            <button id="tab-admin-btn" class="hidden tab-btn px-3 py-1.5 rounded btn-yellow" data-tab="admin">Admin</button>
-            <span id="tenant-badge" class="hidden ml-3 text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300"></span>
-            <button id="btn-logout" class="ml-3 px-3 py-1.5 rounded border border-yellow-500/40 text-yellow-300">Sair</button>
-          </nav>
-        </div>
-      </header>
-
-      <main class="max-w-6xl mx-auto p-4 space-y-6">
-        <div id="toast" class="hidden rounded-lg border border-yellow bg-black p-3 shadow text-yellow-400"></div>
-
-        <!-- ============ as suas seções permanecem iguais ============ -->
-        <!-- AGENDA, REGISTRAR, CAIXA, RELATÓRIOS, CONFIG, ADMIN ... -->
-        <!-- (Conteúdo original das seções mantido) -->
-      </main>
-
-      <footer class="text-center text-xs text-yellow-400 py-6">Navalha Digital – Local First + Supabase. Versão 0.8</footer>
+<body>
+  <div class="navbar">
+    <div class="brand">
+      <span style="font-weight:700">💈</span>
+      <h1>Navalha Digital - MVP Barbearia</h1>
+      <span id="tenantBadge" class="tenant-badge">Tenant: <span id="tenantName">default</span></span>
+    </div>
+    <div>
+      <button id="btnSwitchTenant" class="btn secondary">Trocar Tenant</button>
+      <button id="btnConfig" class="btn secondary">Config</button>
+      <button id="btnLogin" class="btn">Login</button>
+      <button id="btnLogout" class="btn danger" style="display:none">Logout</button>
     </div>
   </div>
 
-  <div id="print-area" class="hidden"></div>
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="auth">Autenticação</button>
+    <button class="tab" data-tab="agenda">Agenda</button>
+    <button class="tab" data-tab="vendas">Registro de Vendas</button>
+    <button class="tab" data-tab="caixa">Caixa</button>
+    <button class="tab" data-tab="relatorios">Relatórios</button>
+    <button class="tab" data-tab="config">Configurações</button>
+    <button class="tab" data-tab="debug">Debug</button>
+  </div>
+
+  <div class="content">
+    <!-- AUTH -->
+    <section id="tab-auth" class="tab-panel" style="display:block">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Login</h3>
+          <p class="small">Entre com e-mail e senha para usar os recursos com Supabase.</p>
+          <div class="row">
+            <div class="col">
+              <label for="email">E-mail</label>
+              <input id="email" class="input" type="email" placeholder="voce@exemplo.com" />
+            </div>
+            <div class="col">
+              <label for="password">Senha</label>
+              <input id="password" class="input" type="password" placeholder="********" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="doLogin" class="btn">Entrar</button>
+            <button id="doSignup" class="btn secondary">Criar conta</button>
+            <button id="doMagicLink" class="btn secondary">Magic Link</button>
+          </div>
+          <div class="hr"></div>
+          <div>
+            <div class="small">Sessão atual:</div>
+            <pre id="authSession" class="mono small" style="white-space: pre-wrap;"></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Perfil</h3>
+          <p class="small">Perfil básico do usuário logado (tabela public.profiles).</p>
+          <div class="row">
+            <div class="col">
+              <label>Full Name</label>
+              <input id="profileFullName" class="input" placeholder="Nome completo"/>
+            </div>
+            <div class="col">
+              <label>Role</label>
+              <select id="profileRole" class="input">
+                <option value="">(vazio)</option>
+                <option value="manager">manager</option>
+                <option value="barber">barber</option>
+                <option value="cashier">cashier</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div class="col">
+              <label>Salon ID</label>
+              <input id="profileSalonId" class="input" placeholder="uuid do salão"/>
+            </div>
+            <div class="col">
+              <label>User ID (auth.uid)</label>
+              <input id="profileUserId" class="input" placeholder="uuid" disabled/>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btnEnsureProfile" class="btn">Garantir/Atualizar Perfil</button>
+            <button id="btnLoadProfile" class="btn secondary">Carregar Perfil</button>
+          </div>
+          <div class="hr"></div>
+          <div class="small">Resultado:</div>
+          <pre id="profileResult" class="mono small" style="white-space: pre-wrap;"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- AGENDA -->
+    <section id="tab-agenda" class="tab-panel" style="display:none">
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <h3>Solicitações de Agendamento</h3>
+            <div class="small">Recebe em tempo real pelo canal “realtime-booking”.</div>
+            <div id="appointmentRequests" class="list" style="margin-top:8px"></div>
+          </div>
+          <div class="card">
+            <h3>Novo Pedido</h3>
+            <div class="row">
+              <div class="col">
+                <label>Nome</label>
+                <input id="reqName" class="input" placeholder="Cliente"/>
+              </div>
+              <div class="col">
+                <label>Serviço</label>
+                <input id="reqService" class="input" placeholder="Corte, Barba..."/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Data/Hora</label>
+                <input id="reqWhen" class="input" type="datetime-local"/>
+              </div>
+              <div class="col">
+                <label>Obs</label>
+                <input id="reqObs" class="input" placeholder="Observações"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button id="btnSendAppointmentRequest" class="btn">Enviar Pedido</button>
+            </div>
+            <div class="small" id="reqStatus"></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <h3>Agenda do Dia</h3>
+            <div class="small">Confirmações e alterações em tempo real.</div>
+            <div id="appointmentsList" class="list" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VENDAS -->
+    <section id="tab-vendas" class="tab-panel" style="display:none">
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <h3>Registrar Venda</h3>
+            <div class="row">
+              <div class="col">
+                <label>Cliente</label>
+                <input id="saleCustomer" class="input" placeholder="Nome do cliente"/>
+              </div>
+              <div class="col">
+                <label>Serviço/Item</label>
+                <input id="saleItem" class="input" placeholder="Ex: Corte Simples"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Valor</label>
+                <input id="saleAmount" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="col">
+                <label>Forma de Pagamento</label>
+                <select id="salePayment" class="input">
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="debito">Débito</option>
+                  <option value="credito">Crédito</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button id="btnAddSale" class="btn">Salvar Venda</button>
+            </div>
+            <div class="small" id="saleStatus"></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <h3>Vendas de Hoje</h3>
+            <div class="small">Lista local (pode ser sincronizada depois com Supabase).</div>
+            <div id="salesToday" class="list" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAIXA -->
+    <section id="tab-caixa" class="tab-panel" style="display:none">
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <h3>Fechamento de Caixa (Diário)</h3>
+            <div class="small">
+              Os fechamentos são salvos localmente e também enviados ao servidor (Supabase) quando possível para persistência e sincronização.
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Data (AAAA-MM-DD)</label>
+                <input id="cashDate" class="input" type="date"/>
+              </div>
+              <div class="col">
+                <label>Operador (email)</label>
+                <input id="cashOperator" class="input" placeholder="email do operador"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Qtde Atendimentos</label>
+                <input id="cashQtde" class="input" type="number" min="0" placeholder="0"/>
+              </div>
+              <div class="col">
+                <label>Dinheiro</label>
+                <input id="cashDinheiro" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Pix</label>
+                <input id="cashPix" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="col">
+                <label>Débito</label>
+                <input id="cashDebito" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div class="col">
+                <label>Crédito</label>
+                <input id="cashCredito" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="col">
+                <label>Total</label>
+                <input id="cashTotal" class="input" type="number" step="0.01" placeholder="0.00"/>
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <label>Itens (JSON)</label>
+              <textarea id="cashItens" rows="4" class="input" placeholder='[{"descricao":"Corte","valor":35.00}]'></textarea>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button id="btnSaveCashClose" class="btn">Salvar Fechamento</button>
+              <button id="btnCalcTotal" class="btn secondary">Calcular Total</button>
+            </div>
+            <div class="small" id="cashStatus"></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card">
+            <h3>Histórico Local de Fechamentos</h3>
+            <div class="small">Mantido localmente; também é salvo no servidor se possível.</div>
+            <div id="cashHistory" class="list" style="margin-top:8px"></div>
+          </div>
+          <div class="card">
+            <h3>Status do Realtime</h3>
+            <div class="small">Conexão com o canal “realtime-booking”.</div>
+            <div id="rtStatus" class="small">Desconectado</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RELATÓRIOS -->
+    <section id="tab-relatorios" class="tab-panel" style="display:none">
+      <div class="card">
+        <h3>Relatórios</h3>
+        <p class="small">Espaço para futuros relatórios: volume diário, ticket médio, ranking por barbeiro, etc.</p>
+        <div class="warning-box">
+          Ainda não conectado aos dados do servidor. Podemos listar os fechamentos diários do Supabase com filtros (salon_id, data) e realtime.
+        </div>
+      </div>
+    </section>
+
+    <!-- CONFIG -->
+    <section id="tab-config" class="tab-panel" style="display:none">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Configuração do Supabase</h3>
+          <p class="small">Defina a URL do projeto e a anon key. Isso ficará em localStorage.</p>
+          <div class="row">
+            <div class="col">
+              <label>Project URL</label>
+              <input id="cfgSupabaseUrl" class="input" placeholder="https://xxxxx.supabase.co"/>
+            </div>
+            <div class="col">
+              <label>Anon Key</label>
+              <input id="cfgSupabaseAnon" class="input" placeholder="eyJhbGciOi..."/>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btnSaveSupabaseCfg" class="btn">Salvar Config</button>
+            <button id="btnClearSupabaseCfg" class="btn secondary">Limpar</button>
+          </div>
+          <div class="hr"></div>
+          <div class="ok-box">
+            Dica: se estiver com dificuldade de login, você pode colar a URL e a Anon key direto aqui, salvar e recarregar a página.
+          </div>
+        </div>
+        <div class="card">
+          <h3>Tenant / MASTER</h3>
+          <div class="row">
+            <div class="col">
+              <label>Tenant atual</label>
+              <input id="cfgTenant" class="input" placeholder="default"/>
+            </div>
+            <div class="col">
+              <label>Modo</label>
+              <select id="cfgMode" class="input">
+                <option value="tenant">Tenant</option>
+                <option value="master">MASTER</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btnSaveTenantCfg" class="btn">Salvar Tenant/Modo</button>
+          </div>
+          <div class="hr"></div>
+          <div class="small">Essas configs influenciam filtros e visuais. O canal de realtime é único.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEBUG -->
+    <section id="tab-debug" class="tab-panel" style="display:none">
+      <div class="card">
+        <h3>Debug</h3>
+        <div class="row">
+          <button id="btnShowLocalStorage" class="btn secondary">Mostrar localStorage</button>
+          <button id="btnClearLocalStorage" class="btn danger">Limpar localStorage</button>
+        </div>
+        <div class="hr"></div>
+        <pre id="debugOut" class="mono small" style="white-space: pre-wrap;"></pre>
+      </div>
+    </section>
+  </div>
+
+  <!-- Supabase JS -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
   <script>
-    // ========================= SUPABASE CONFIG =========================
-    const SUPABASE_URL  = "https://xvrfpciqnuzxfsaktlja.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2cmZwY2lxbnV6eGZzYWt0bGphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1NjI1NjYsImV4cCI6MjA3MTEzODU2Nn0.JBmK1MnM8-8mjKq5bLHOh-9alHGTpCiXtsZnC-uFGlc";
-
-    const MASTER_EMAILS = [ "jacivaldojr@gmail.com" ];
-
-    function resolveSupabaseConfig(){
-      const cfgUrl = localStorage.getItem('bb_cfg_supabase_url');
-      const cfgKey = localStorage.getItem('bb_cfg_supabase_anon');
-      const url = cfgUrl || SUPABASE_URL;
-      const key = cfgKey || SUPABASE_ANON_KEY;
-      return { url, key };
-    }
-
-    let supabase = null;
-    function createSupabase(){
-      const { url, key } = resolveSupabaseConfig();
-      if (window.supabase?.createClient && url && key){
-        supabase = window.supabase.createClient(url, key);
-      } else {
-        supabase = null;
-      }
-    }
-
-    function sb(){ if (!supabase) throw new Error('Supabase não configurado'); return supabase; }
-    function withTenant(q){ return activeTenantId ? q.eq('salon_id', activeTenantId) : q; }
-
-    // ========================= STATE =========================
-    let __user = null;
-    let isMaster = false;
-    let activeTenantId = null;
-    let activeTenantName = null;
-    let __tabsBound = false;
-    let __salesRtChannel = null;
-
-    function showApp(){ document.getElementById('app').classList.remove('hidden'); document.getElementById('auth-screen').classList.add('hidden'); }
-    function hideApp(){ document.getElementById('app').classList.add('hidden'); document.getElementById('auth-screen').classList.remove('hidden'); }
-
-    async function bootstrapAuth(){
-      createSupabase();
-      if (!supabase){
-        document.getElementById('auth-msg').textContent =
-          'Cole a URL e a anon key de Supabase nas Configurações e clique "Salvar e recarregar".';
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      __user = session?.user || null;
-
-      if (__user) {
-        try {
-          await ensureProfileUniversal(); // cria/atualiza profile p/ qualquer usuário
-        } catch(e) {
-          console.warn('ensureProfileUniversal falhou (seguindo mesmo assim):', e);
-        }
-      }
-
-      computeRole();
-      if (__user) showApp(); else hideApp();
-      await initAfterAuth();
-
-      if (typeof setupRealtime === 'function') { setupRealtime(); }
-      if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
-
-      supabase.auth.onAuthStateChange(async (_evt, session)=>{
-        __user = session?.user || null;
-        if (__user) {
-          try {
-            await ensureProfileUniversal();
-          } catch(e) {
-            console.warn('ensureProfileUniversal (onAuthStateChange) falhou:', e);
-          }
-        }
-        computeRole();
-        if (__user) showApp(); else hideApp();
-        await initAfterAuth();
-        if (typeof setupRealtime === 'function') { setupRealtime(); }
-        if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
-      });
-    }
-
-    // ====================== TENANTS (apenas master) ======================
-    const TENANTS_KEY = () => `bb_${__user?.id || 'anon'}_tenants`;
-    function loadTenants(){ try{ return JSON.parse(localStorage.getItem(TENANTS_KEY())) || []; }catch(_){ return []; } }
-    function saveTenants(list){ localStorage.setItem(TENANTS_KEY(), JSON.stringify(list)); }
-    function slugify(str){ return (str||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,40); }
-    function randomId(n=5){ const abc='abcdefghijklmnopqrstuvwxyz0123456789'; let s=''; for(let i=0;i<n;i++) s+=abc[Math.floor(Math.random()*abc.length)]; return s; }
-
-    function setActiveTenant(id, nome){
-      activeTenantId = id; activeTenantName = nome || id;
-      localStorage.setItem('bb_master_last_tenant', id);
-      applyRoleUI();
-      if (typeof setupRealtime === 'function') { setupRealtime(); }
-      if (typeof setupSalesRealtime === 'function') { setupSalesRealtime(); }
-      refreshAll();
-    }
-
-    function applyRoleUI(){
-      document.querySelector('#tab-admin-btn')?.classList.toggle('hidden', !isMaster);
-      const badge = document.querySelector('#tenant-badge');
-      if (isMaster && activeTenantId){ badge.classList.remove('hidden'); badge.textContent = `Cliente: ${activeTenantName}`; }
-      else { badge.classList.add('hidden'); badge.textContent=''; }
-    }
-
-    function ensureDefaultTenantForMaster(){
-      if (!isMaster) return;
-      const list = loadTenants();
-      if (list.length > 0) return;
-      const id = `barbearia-jacivaldo-${randomId(5)}`;
-      const nome = 'Barbearia do Jacivaldo';
-      list.push({ id, nome });
-      saveTenants(list);
-      setActiveTenant(id, nome);
-      toast('Cliente padrão criado e selecionado para o master.');
-    }
-
-    // ========================= ROLE / MASTER =========================
-    function computeRole(){
-      const email = (__user?.email || '').toLowerCase();
-      isMaster = !!email && MASTER_EMAILS.map(e=>e.toLowerCase()).includes(email);
-
-      if (!isMaster && __user?.user_metadata){
-        const meta = __user.user_metadata || {};
-        if (meta.salon_id){ activeTenantId = meta.salon_id; activeTenantName = meta.salon_name || meta.salon_id; }
-        else { activeTenantId = null; activeTenantName = null; }
-      } else if (isMaster){
-        const last = localStorage.getItem('bb_master_last_tenant');
-        const t = loadTenants().find(x=>x.id===last);
-        if (t) setActiveTenant(t.id, t.nome);
-        else { activeTenantId = null; activeTenantName = null; }
-      } else {
-        activeTenantId = null; activeTenantName = null;
-      }
-
-      ensureDefaultTenantForMaster();
-      applyRoleUI();
-    }
-
-    // ========================= UTIL =========================
-    const brl = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const el = (sel, root=document) => root.querySelector(sel);
-    const els = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-    function toast(msg){ const t = el('#toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 1600); }
-
-    // ===================== STORAGE (Local) =====================
-    const STORE_KEYS = { BARBEIROS: 'barbeiros', SERVICOS: 'servicos', VENDAS: 'vendas', AGENDA: 'agenda', CLOSURES: 'caixa' };
-
-    function currentScope(){
-      if (isMaster) return activeTenantId || 'no-tenant';
-      const salonId = __user?.user_metadata?.salon_id;
-      if (salonId) return salonId;
-      return __user?.id || 'anon';
-    }
-
-    const scopeKey = (k) => `bb_${currentScope()}_${k}`;
-
-    const Storage = {
-      get(k, fallback){ try{ return JSON.parse(localStorage.getItem(scopeKey(k))) ?? fallback; }catch(_){ return fallback; } },
-      set(k, v){ localStorage.setItem(scopeKey(k), JSON.stringify(v)); },
-      push(k, item){ const arr = Storage.get(k, []); arr.push(item); Storage.set(k, arr); return arr; },
-      clear(){ Object.values(STORE_KEYS).forEach(k=>localStorage.removeItem(scopeKey(k))); }
+    // -------------------------
+    // Util de Config e Estado
+    // -------------------------
+    const LS_KEYS = {
+      supabaseUrl: 'bb_cfg_supabase_url',
+      supabaseAnon: 'bb_cfg_supabase_anon',
+      tenant: 'bb_cfg_tenant',
+      mode: 'bb_cfg_mode',
+      sales: 'bb_sales_today',
+      cash: 'bb_cash_history'
     };
 
-    function migrateAnonToCurrentScope(){
-      const curPrefix  = `bb_${currentScope()}_`;
-      const anonPrefix = `bb_anon_`;
-      if (curPrefix === anonPrefix) return;
-      Object.values(STORE_KEYS).forEach(k=>{
-        const aKey = anonPrefix + k;
-        const cKey = curPrefix  + k;
-        const aVal = localStorage.getItem(aKey);
-        if (aVal && !localStorage.getItem(cKey)) {
-          localStorage.setItem(cKey, aVal);
-        }
+    function getCfg(key, def='') {
+      try { return localStorage.getItem(key) ?? def; } catch(e) { return def; }
+    }
+    function setCfg(key, val) {
+      try { localStorage.setItem(key, val); } catch(e) {}
+    }
+    function delCfg(key) {
+      try { localStorage.removeItem(key); } catch(e) {}
+    }
+
+    function nowIso() {
+      return new Date().toISOString();
+    }
+
+    function getTenant() {
+      return getCfg(LS_KEYS.tenant, 'default') || 'default';
+    }
+    function setTenant(val) {
+      setCfg(LS_KEYS.tenant, val || 'default');
+      document.getElementById('tenantName').textContent = getTenant();
+    }
+    function getMode() {
+      return getCfg(LS_KEYS.mode, 'tenant') || 'tenant';
+    }
+    function setMode(val) {
+      setCfg(LS_KEYS.mode, val || 'tenant');
+    }
+
+    // -------------------------
+    // Supabase Client
+    // -------------------------
+    let _supabase = null;
+    function sb() {
+      if (_supabase) return _supabase;
+      const url = getCfg(LS_KEYS.supabaseUrl, '');
+      const anon = getCfg(LS_KEYS.supabaseAnon, '');
+      if (!url || !anon) return null;
+      _supabase = window.supabase.createClient(url, anon, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
+      return _supabase;
     }
 
-    function migrateUserIdToTenantScope(){
-      if (isMaster) return;
-      const tenant = __user?.user_metadata?.salon_id;
-      const userId = __user?.id;
-      if (!tenant || !userId) return;
-      const userPrefix   = `bb_${userId}_`;
-      const tenantPrefix = `bb_${tenant}_`;
-      Object.values(STORE_KEYS).forEach(k=>{
-        const uKey = userPrefix + k;
-        const tKey = tenantPrefix + k;
-        const uVal = localStorage.getItem(uKey);
-        if (uVal && !localStorage.getItem(tKey)) {
-          localStorage.setItem(tKey, uVal);
-        }
+    // -------------------------
+    // Abas
+    // -------------------------
+    const tabsEl = document.getElementById('tabs');
+    const panels = {
+      auth: document.getElementById('tab-auth'),
+      agenda: document.getElementById('tab-agenda'),
+      vendas: document.getElementById('tab-vendas'),
+      caixa: document.getElementById('tab-caixa'),
+      relatorios: document.getElementById('tab-relatorios'),
+      config: document.getElementById('tab-config'),
+      debug: document.getElementById('tab-debug')
+    };
+    tabsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      Object.entries(panels).forEach(([k, el]) => {
+        el.style.display = (k === tab) ? 'block' : 'none';
       });
-    }
+    });
 
-    // ====================== DADOS PADRÃO ======================
-    function seed(){
-      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
-      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+    // -------------------------
+    // AUTH UI
+    // -------------------------
+    const btnLogin = document.getElementById('btnLogin');
+    const btnLogout = document.getElementById('btnLogout');
+    const doLoginBtn = document.getElementById('doLogin');
+    const doSignupBtn = document.getElementById('doSignup');
+    const doMagicLinkBtn = document.getElementById('doMagicLink');
+    const authSessionEl = document.getElementById('authSession');
 
-      if (isMaster && !activeTenantId) return;
-
-      if (!Storage.get(STORE_KEYS.BARBEIROS)){
-        Storage.set(STORE_KEYS.BARBEIROS, [
-          { id: crypto.randomUUID(), nome: 'Lucas' },
-          { id: crypto.randomUUID(), nome: 'Pedro' },
-          { id: crypto.randomUUID(), nome: 'Saulo' },
-        ]);
+    async function refreshAuthUI() {
+      const client = sb();
+      if (!client) {
+        btnLogin.style.display = '';
+        btnLogout.style.display = 'none';
+        authSessionEl.textContent = 'Supabase não configurado.';
+        return;
       }
-      if (!Storage.get(STORE_KEYS.SERVICOS)){
-        Storage.set(STORE_KEYS.SERVICOS, [
-          { id: crypto.randomUUID(), nome: 'Corte disfarçado', valor: 35 },
-          { id: crypto.randomUUID(), nome: 'Corte tesoura + máquina', valor: 40 },
-          { id: crypto.randomUUID(), nome: 'Barba', valor: 25 },
-          { id: crypto.randomUUID(), nome: 'Neviu', valor: 20 },
-          { id: crypto.randomUUID(), nome: 'Corte navalhado', valor: 45 },
-        ]);
-      }
-      if (!Storage.get(STORE_KEYS.VENDAS))  Storage.set(STORE_KEYS.VENDAS, []);
-      if (!Storage.get(STORE_KEYS.AGENDA))  Storage.set(STORE_KEYS.AGENDA, []);
-      if (!Storage.get(STORE_KEYS.CLOSURES)) Storage.set(STORE_KEYS.CLOSURES, []);
-    }
-
-    // =================== FUNÇÕES UNIVERSAIS DE PROFILE ===================
-    async function ensureProfileUniversal() {
-      try {
-        const { data: { user} } = await sb().auth.getUser();
-        if (!user) return null;
-
-        let { data: prof, error: pErr } = await sb()
-          .from('profiles')
-          .select('user_id, salon_id, full_name, role')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (pErr) throw pErr;
-
-        if (prof?.salon_id) return prof;
-
-        let salonId;
-        try {
-          const { data: salon, error: sErr } = await sb()
-            .from('salons')
-            .insert({
-              name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'Meu Salão',
-              owner_user_id: user.id
-            })
-            .select('id')
-            .single();
-          if (sErr) throw sErr;
-          salonId = salon.id;
-        } catch (e) {
-          console.warn('Falha ao criar salon (ok se não existir tabela salons):', e?.message);
-          salonId = crypto.randomUUID();
-        }
-
-        const { error: upErr } = await sb()
-          .from('profiles')
-          .upsert({
-            user_id: user.id,
-            salon_id: salonId,
-            full_name: user.user_metadata?.display_name || '',
-            role: 'manager'
-          }, { onConflict: 'user_id' });
-        if (upErr) throw upErr;
-
-        return { user_id: user.id, salon_id: salonId, full_name: user.user_metadata?.display_name || '', role: 'manager' };
-      } catch (err) {
-        console.error('ensureProfileUniversal error:', err);
-        return null;
+      const { data: { session } } = await client.auth.getSession();
+      if (session) {
+        btnLogin.style.display = 'none';
+        btnLogout.style.display = '';
+        authSessionEl.textContent = JSON.stringify({
+          user: session.user?.email,
+          user_id: session.user?.id,
+          expires_at: session.expires_at
+        }, null, 2);
+      } else {
+        btnLogin.style.display = '';
+        btnLogout.style.display = 'none';
+        authSessionEl.textContent = 'Sem sessão.';
       }
     }
 
-    // ================ AJUSTES CRÍTICOS: VENDAS E CAIXA =================
-    async function getSalonIdFromProfile() {
-      const { data: { user } } = await sb().auth.getUser();
-      if (!user) return null;
-      const { data, error } = await sb()
-        .from('profiles')
-        .select('salon_id')
-        .eq('user_id', user.id)
-        .single();
-      if (error) { console.error(error); return null; }
-      return data?.salon_id || null;
-    }
+    btnLogin.addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const client = sb();
+      if (!client) return alert('Configure o Supabase em Configurações.');
+      if (!email || !password) return alert('Informe e-mail e senha.');
+      const { error } = await client.auth.signInWithPassword({ email, password });
+      if (error) alert('Erro no login: ' + error.message);
+      await refreshAuthUI();
+      await loadProfileUI();
+    });
 
-    async function registrarVenda({ salonId, barberId=null, customerName, serviceName, priceReais, paymentType, notes='', soldAt=new Date().toISOString() }) {
-      const price_cents = Math.round(Number(priceReais) * 100);
-      const { data, error } = await sb()
-        .from('sales')
-        .insert([{
-          salon_id: salonId,
-          barber_id: barberId,
-          customer_name: customerName,
-          service_name: serviceName,
-          price_cents,
-          payment_type: paymentType,
-          notes,
-          sold_at: soldAt,
-        }])
-        .select('*')
-        .single();
-      if (error) throw error;
-      return data;
-    }
+    btnLogout.addEventListener('click', async () => {
+      const client = sb();
+      if (client) await client.auth.signOut();
+      await refreshAuthUI();
+    });
 
-    async function listarVendasDoDiaServer(salonId, yyyy_mm_dd) {
-      const inicio = new Date(yyyy_mm_dd); inicio.setHours(0,0,0,0);
-      const fim = new Date(inicio); fim.setDate(inicio.getDate() + 1);
-      const { data, error } = await sb()
-        .from('sales')
-        .select('*')
-        .eq('salon_id', salonId)
-        .gte('sold_at', inicio.toISOString())
-        .lt('sold_at',  fim.toISOString())
-        .order('sold_at', { ascending: true });
-      if (error) { console.error(error); return []; }
-      return data || [];
-    }
+    doLoginBtn.addEventListener('click', () => btnLogin.click());
+    doSignupBtn.addEventListener('click', async () => {
+      const client = sb();
+      if (!client) return alert('Configure o Supabase em Configurações.');
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!email || !password) return alert('Informe e-mail e senha.');
+      const { error } = await client.auth.signUp({ email, password });
+      if (error) alert('Erro no signup: ' + error.message);
+      else alert('Cadastro realizado. Verifique seu e-mail se confirmação estiver ativa.');
+    });
+    doMagicLinkBtn.addEventListener('click', async () => {
+      const client = sb();
+      if (!client) return alert('Configure o Supabase em Configurações.');
+      const email = document.getElementById('email').value.trim();
+      if (!email) return alert('Informe o e-mail.');
+      const { error } = await client.auth.signInWithOtp({ email });
+      if (error) alert('Erro no magic link: ' + error.message);
+      else alert('Magic link enviado (se habilitado).');
+    });
+
+    // -------------------------
+    // Perfil
+    // -------------------------
+    const btnEnsureProfile = document.getElementById('btnEnsureProfile');
+    const btnLoadProfile = document.getElementById('btnLoadProfile');
+    const profileResult = document.getElementById('profileResult');
 
     async function getMySalonIdFromProfiles() {
-      const { data: { user } } = await sb().auth.getUser();
+      const client = sb();
+      if (!client) throw new Error('Supabase não configurado.');
+      const { data: { user } } = await client.auth.getUser();
       if (!user) throw new Error('Sem usuário');
-      const { data, error } = await sb()
+      // CORREÇÃO APLICADA AQUI: buscar por user_id
+      const { data, error } = await client
         .from('profiles')
         .select('salon_id')
         .eq('user_id', user.id)
         .single();
       if (error) throw error;
-      return data.salon_id;
+      return data?.salon_id ?? null;
     }
 
-    async function salvarFechamentoNoSupabase(closure) {
-      if (!supabase) return null;
-      const { data: { user } } = await sb().auth.getUser();
-      if (!user) throw new Error('Sem usuário autenticado');
-      const salonId = await getMySalonIdFromProfiles();
-      if (!salonId) throw new Error('Perfil sem salon_id');
+    async function ensureProfile() {
+      const client = sb();
+      if (!client) {
+        profileResult.textContent = 'Supabase não configurado.';
+        return;
+      }
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) {
+        profileResult.textContent = 'Faça login primeiro.';
+        return;
+      }
+      const full_name = (document.getElementById('profileFullName').value || '').trim();
+      const role = (document.getElementById('profileRole').value || '').trim();
+      const salon_id = (document.getElementById('profileSalonId').value || '').trim() || null;
 
-      const dateIso = closure.dataCaixa?.includes('/')
-        ? closure.dataCaixa.split('/').reverse().join('-')
-        : closure.dataCaixa;
-
-      const payload = {
-        salon_id: salonId,
-        operator_id: user.id,
-        operator_email: user.email,
-        date_yyyy_mm_dd: dateIso,
-        nome_cliente: closure.nomeCliente,
-        qtde: closure.qtde,
-        pix: closure.pix,
-        debito: closure.debito,
-        credito: closure.credito,
-        dinheiro: closure.dinheiro,
-        total: closure.total,
-        itens: closure.itens || []
-      };
-
-      const { data, error } = await sb()
-        .from('caixa_fechamentos')
-        .insert(payload)
+      // upsert por user_id
+      const payload = { user_id: user.id, full_name: full_name || null, role: role || null, salon_id };
+      const { data, error } = await client
+        .from('profiles')
+        .upsert(payload, { onConflict: 'user_id' })
         .select('*')
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
-      return data;
+      if (error) {
+        profileResult.textContent = 'Erro: ' + error.message;
+      } else {
+        profileResult.textContent = 'OK: ' + JSON.stringify(data, null, 2);
+        document.getElementById('profileUserId').value = user.id;
+      }
     }
 
-    // ======== Auth UI ========
-    document.getElementById('auth-form')?.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      if (!supabase){
-        document.getElementById('auth-msg').textContent =
-          'Cole a URL e a anon key nas Configurações e clique "Salvar e recarregar".';
+    async function loadProfileUI() {
+      const client = sb();
+      if (!client) {
+        profileResult.textContent = 'Supabase não configurado.';
         return;
       }
-      const email = document.getElementById('auth-email').value.trim();
-      const password = document.getElementById('auth-pass').value;
-      const msg = document.getElementById('auth-msg');
-      msg.textContent = 'Entrando...';
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error){ msg.textContent = 'Falha ao entrar: ' + error.message; return; }
-      msg.textContent = 'Ok!';
-    });
-
-    document.getElementById('btn-signup')?.addEventListener('click', async ()=>{
-      if (!supabase){
-        document.getElementById('auth-msg').textContent =
-          'Cole a URL e a anon key nas Configurações e clique "Salvar e recarregar".';
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) {
+        profileResult.textContent = 'Sem usuário.';
         return;
       }
-      const email = document.getElementById('auth-email').value.trim();
-      const password = document.getElementById('auth-pass').value;
-      const msg = document.getElementById('auth-msg');
-      if (!password || password.length < 6){
-        msg.textContent = 'Informe uma senha com 6+ caracteres.';
-        return;
-      }
-      msg.textContent = 'Criando conta...';
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/#`
+      const { data, error } = await client
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id) // coerente com a correção
+        .maybeSingle();
+      if (error) {
+        profileResult.textContent = 'Erro carregando: ' + error.message;
+      } else {
+        profileResult.textContent = 'Perfil: ' + JSON.stringify(data, null, 2);
+        if (data) {
+          document.getElementById('profileFullName').value = data.full_name ?? '';
+          document.getElementById('profileRole').value = data.role ?? '';
+          document.getElementById('profileSalonId').value = data.salon_id ?? '';
+          document.getElementById('profileUserId').value = data.user_id ?? '';
         }
-      });
-      if (error){ msg.textContent = 'Falha ao criar: ' + error.message; return; }
-      msg.textContent = 'Conta criada! Entrando...';
-      const { error: e2 } = await supabase.auth.signInWithPassword({ email, password });
-      if (e2){ msg.textContent = 'Criou mas não entrou: ' + e2.message; return; }
-      msg.textContent = 'Ok!';
-    });
-
-    document.getElementById('btn-logout')?.addEventListener('click', async ()=>{ if (!supabase) return; await supabase.auth.signOut(); });
-
-    // ======== Config Supabase ========
-    document.getElementById('cfg-sb-save')?.addEventListener('click', ()=>{
-      const u = el('#cfg-sb-url').value.trim();
-      const k = el('#cfg-sb-anon').value.trim();
-      if (!u || !k){ toast('Informe URL e anon key.'); return; }
-      localStorage.setItem('bb_cfg_supabase_url', u);
-      localStorage.setItem('bb_cfg_supabase_anon', k);
-      location.reload();
-    });
-    document.getElementById('cfg-sb-clear')?.addEventListener('click', ()=>{
-      localStorage.removeItem('bb_cfg_supabase_url');
-      localStorage.removeItem('bb_cfg_supabase_anon');
-      toast('Config limpa. Recarregue a página.');
-    });
-
-    // =================== INICIALIZAÇÃO ===================
-    async function refreshAll(){
-      fillSelects?.();
-      renderAgenda?.();
-      renderVendas?.();
-      renderRelatorios?.();
-      renderBookingInbox?.();
-      renderCaixa?.();
-    }
-
-    async function initAfterAuth(){
-      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
-      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
-
-      seed();
-      ensureDefaultTenantForMaster();
-      refreshAll();
-
-      if (!__tabsBound){
-        els('.tab-btn').forEach(b=>b.addEventListener('click', ()=>activateTab?.(b.dataset.tab)));
-        __tabsBound = true;
       }
-      const vd = el('#vd-data'); if (vd) vd.value = new Date().toISOString().slice(0,10);
-      if (isMaster && !activeTenantId) activateTab?.('admin'); else activateTab?.('agendar');
     }
 
-    bootstrapAuth();
+    btnEnsureProfile.addEventListener('click', ensureProfile);
+    btnLoadProfile.addEventListener('click', loadProfileUI);
+
+    // -------------------------
+    // Agenda (local + realtime)
+    // -------------------------
+    const appointmentRequestsEl = document.getElementById('appointmentRequests');
+    const appointmentsListEl = document.getElementById('appointmentsList');
+    const reqStatusEl = document.getElementById('reqStatus');
+
+    let appointmentRequests = []; // local
+    let appointments = [];        // local
+
+    function renderAppointmentRequests() {
+      appointmentRequestsEl.innerHTML = '';
+      appointmentRequests.forEach((r, idx) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <div><span class="status-dot online"></span><strong>${r.name || ''}</strong> - ${r.service || ''}</div>
+          <div class="small">${r.when || ''} | ${r.obs || ''}</div>
+          <div class="small">id: <code class="inline">${r.id || idx}</code></div>
+        `;
+        appointmentRequestsEl.appendChild(div);
+      });
+    }
+
+    function renderAppointments() {
+      appointmentsListEl.innerHTML = '';
+      appointments.forEach((a, idx) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <div><span class="status-dot ${a.status === 'confirmed' ? 'online' : 'offline'}"></span>
+            <strong>${a.customer || ''}</strong> - ${a.service || ''}</div>
+          <div class="small">${a.when || ''} | Prof: ${a.barber || '-'}</div>
+          <div class="small">status: ${a.status || 'pending'} | id: <code class="inline">${a.id || idx}</code></div>
+        `;
+        appointmentsListEl.appendChild(div);
+      });
+    }
+
+    document.getElementById('btnSendAppointmentRequest').addEventListener('click', async () => {
+      const name = document.getElementById('reqName').value.trim();
+      const service = document.getElementById('reqService').value.trim();
+      const when = document.getElementById('reqWhen').value;
+      const obs = document.getElementById('reqObs').value.trim();
+      if (!name || !service || !when) {
+        reqStatusEl.textContent = 'Preencha nome, serviço e data/hora.';
+        return;
+      }
+      // Local append para demo
+      const req = { id: 'local-' + Date.now(), name, service, when, obs, tenant: getTenant(), created_at: nowIso() };
+      appointmentRequests.unshift(req);
+      renderAppointmentRequests();
+
+      // Notificar via Realtime (se conectado)
+      try {
+        const client = sb();
+        if (!client) return;
+        await client.channel('realtime-booking').send({
+          type: 'broadcast',
+          event: 'appointment_request',
+          payload: req
+        });
+        reqStatusEl.textContent = 'Pedido enviado (broadcast).';
+      } catch (e) {
+        reqStatusEl.textContent = 'Enviado localmente, realtime indisponível.';
+      }
+    });
+
+    // -------------------------
+    // Vendas (local)
+    // -------------------------
+    function loadSales() {
+      try {
+        const raw = getCfg(LS_KEYS.sales, '[]');
+        return JSON.parse(raw);
+      } catch(e) { return []; }
+    }
+    function saveSales(items) {
+      setCfg(LS_KEYS.sales, JSON.stringify(items || []));
+    }
+    function renderSales() {
+      const container = document.getElementById('salesToday');
+      const sales = loadSales();
+      container.innerHTML = '';
+      sales.forEach((s, idx) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <div><strong>${s.customer || ''}</strong> - ${s.item || ''}</div>
+          <div class="small">R$ ${Number(s.amount || 0).toFixed(2)} | ${s.payment || ''} | ${s.when || ''}</div>
+          <div class="small">id: <code class="inline">${s.id || idx}</code></div>
+        `;
+        container.appendChild(div);
+      });
+    }
+    document.getElementById('btnAddSale').addEventListener('click', () => {
+      const customer = document.getElementById('saleCustomer').value.trim();
+      const item = document.getElementById('saleItem').value.trim();
+      const amount = parseFloat(document.getElementById('saleAmount').value || '0');
+      const payment = document.getElementById('salePayment').value;
+      const saleStatus = document.getElementById('saleStatus');
+
+      if (!customer || !item || !(amount > 0)) {
+        saleStatus.textContent = 'Preencha cliente, item e valor > 0.';
+        return;
+      }
+      const sales = loadSales();
+      sales.unshift({
+        id: 'sale-' + Date.now(),
+        customer, item, amount, payment,
+        when: new Date().toLocaleString(),
+        tenant: getTenant()
+      });
+      saveSales(sales);
+      renderSales();
+      saleStatus.textContent = 'Venda registrada localmente.';
+    });
+
+    // -------------------------
+    // Caixa (local + supabase)
+    // -------------------------
+    function loadCashHistory() {
+      try {
+        const raw = getCfg(LS_KEYS.cash, '[]');
+        return JSON.parse(raw);
+      } catch(e) { return []; }
+    }
+    function saveCashHistory(items) {
+      setCfg(LS_KEYS.cash, JSON.stringify(items || []));
+    }
+    function renderCashHistory() {
+      const container = document.getElementById('cashHistory');
+      const items = loadCashHistory();
+      container.innerHTML = '';
+      items.forEach((c, idx) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <div><strong>${c.date_yyyy_mm_dd || ''}</strong> — Total R$ ${Number(c.total || 0).toFixed(2)}</div>
+          <div class="small">op: ${c.operator_email || ''} | ${c.qtde || 0} atend.</div>
+          <div class="small">pix: ${Number(c.pix||0).toFixed(2)} | débito: ${Number(c.debito||0).toFixed(2)} | crédito: ${Number(c.credito||0).toFixed(2)} | dinheiro: ${Number(c.dinheiro||0).toFixed(2)}</div>
+          <div class="small">itens: ${Array.isArray(c.itens) ? c.itens.length : 0} | id: <code class="inline">${c.id || idx}</code></div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    document.getElementById('btnCalcTotal').addEventListener('click', () => {
+      const d = parseFloat(document.getElementById('cashDinheiro').value || '0');
+      const p = parseFloat(document.getElementById('cashPix').value || '0');
+      const db = parseFloat(document.getElementById('cashDebito').value || '0');
+      const cr = parseFloat(document.getElementById('cashCredito').value || '0');
+      document.getElementById('cashTotal').value = (d + p + db + cr).toFixed(2);
+    });
+
+    document.getElementById('btnSaveCashClose').addEventListener('click', async () => {
+      const cashStatus = document.getElementById('cashStatus');
+      try {
+        const date_yyyy_mm_dd = document.getElementById('cashDate').value;
+        const operator_email = document.getElementById('cashOperator').value.trim();
+        const qtde = parseInt(document.getElementById('cashQtde').value || '0', 10);
+        const pix = parseFloat(document.getElementById('cashPix').value || '0');
+        const debito = parseFloat(document.getElementById('cashDebito').value || '0');
+        const credito = parseFloat(document.getElementById('cashCredito').value || '0');
+        const dinheiro = parseFloat(document.getElementById('cashDinheiro').value || '0');
+        const total = parseFloat(document.getElementById('cashTotal').value || '0');
+
+        let itens = [];
+        const itensRaw = document.getElementById('cashItens').value.trim();
+        if (itensRaw) {
+          try { itens = JSON.parse(itensRaw); } catch(e) { itens = []; }
+        }
+
+        if (!date_yyyy_mm_dd) throw new Error('Informe a data do fechamento.');
+        if (!operator_email) throw new Error('Informe o e-mail do operador.');
+
+        const closeObj = {
+          id: 'close-' + Date.now(),
+          date_yyyy_mm_dd, operator_email, qtde, pix, debito, credito, dinheiro, total,
+          itens, when: nowIso(), tenant: getTenant()
+        };
+
+        // Salvar localmente
+        const history = loadCashHistory();
+        history.unshift(closeObj);
+        saveCashHistory(history);
+        renderCashHistory();
+
+        // Tentar salvar no Supabase
+        const client = sb();
+        if (client) {
+          try {
+            const { data: { user } } = await client.auth.getUser();
+            if (!user) throw new Error('Sem usuário logado para salvar no servidor.');
+            // Pegar salon_id do perfil do usuário (usando a função corrigida)
+            const salon_id = await getMySalonIdFromProfiles();
+
+            const payload = {
+              salon_id,
+              operator_id: user.id,
+              operator_email: operator_email,
+              date_yyyy_mm_dd: date_yyyy_mm_dd,
+              nome_cliente: null,
+              qtde,
+              pix, debito, credito, dinheiro, total,
+              itens
+            };
+
+            const { error } = await client.from('caixa_fechamentos').insert(payload);
+            if (error) throw error;
+
+            // Broadcast realtime opcional
+            await client.channel('realtime-booking').send({
+              type: 'broadcast',
+              event: 'cash_close',
+              payload: { ...payload, when: nowIso(), tenant: getTenant() }
+            });
+
+            cashStatus.textContent = 'Fechamento salvo local e no servidor.';
+          } catch (e) {
+            cashStatus.textContent = 'Fechamento salvo local. Erro ao salvar no servidor: ' + (e.message || e);
+          }
+        } else {
+          cashStatus.textContent = 'Fechamento salvo local. Configure Supabase para salvar no servidor.';
+        }
+      } catch (e) {
+        cashStatus.textContent = 'Erro: ' + (e.message || e);
+      }
+    });
+
+    // -------------------------
+    // Realtime
+    // -------------------------
+    let rtChannel = null;
+    const rtStatusEl = document.getElementById('rtStatus');
+
+    function setupRealtime() {
+      const client = sb();
+      if (!client) {
+        rtStatusEl.textContent = 'Desconectado (Supabase não configurado).';
+        return;
+      }
+      if (rtChannel) {
+        try { client.removeChannel(rtChannel); } catch(e) {}
+        rtChannel = null;
+      }
+      rtChannel = client.channel('realtime-booking', { config: { broadcast: { ack: true } } });
+
+      rtChannel.on('broadcast', { event: 'appointment_request' }, ({ payload }) => {
+        // Receber pedidos
+        if (payload?.tenant && payload.tenant !== getTenant() && getMode() !== 'master') return;
+        appointmentRequests.unshift(payload);
+        renderAppointmentRequests();
+      });
+
+      rtChannel.on('broadcast', { event: 'appointment_confirmed' }, ({ payload }) => {
+        if (payload?.tenant && payload.tenant !== getTenant() && getMode() !== 'master') return;
+        appointments.unshift({ ...payload, status: 'confirmed' });
+        renderAppointments();
+      });
+
+      rtChannel.on('broadcast', { event: 'cash_close' }, ({ payload }) => {
+        if (payload?.tenant && payload.tenant !== getTenant() && getMode() !== 'master') return;
+        // Apenas feedback visual para gerente acompanhar
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <div><strong>Fechamento recebido</strong> — Total R$ ${Number(payload?.total || 0).toFixed(2)}</div>
+          <div class="small">${payload?.date_yyyy_mm_dd || ''} | op: ${payload?.operator_email || ''}</div>
+        `;
+        // Mostra em "Agenda do Dia" como um evento informativo (ou crie uma área própria)
+        appointmentsListEl.prepend(div);
+      });
+
+      rtChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') rtStatusEl.textContent = 'Conectado ao canal.';
+        else rtStatusEl.textContent = 'Status: ' + status;
+      });
+    }
+
+    // -------------------------
+    // Config Supabase
+    // -------------------------
+    document.getElementById('btnSaveSupabaseCfg').addEventListener('click', () => {
+      const url = document.getElementById('cfgSupabaseUrl').value.trim();
+      const anon = document.getElementById('cfgSupabaseAnon').value.trim();
+      if (!url || !anon) return alert('Informe URL e Anon Key.');
+      setCfg(LS_KEYS.supabaseUrl, url);
+      setCfg(LS_KEYS.supabaseAnon, anon);
+      _supabase = null; // reset
+      setupRealtime();
+      refreshAuthUI();
+      alert('Configurações salvas.');
+    });
+    document.getElementById('btnClearSupabaseCfg').addEventListener('click', () => {
+      delCfg(LS_KEYS.supabaseUrl);
+      delCfg(LS_KEYS.supabaseAnon);
+      _supabase = null;
+      setupRealtime();
+      refreshAuthUI();
+      alert('Config limpa.');
+    });
+
+    document.getElementById('btnSaveTenantCfg').addEventListener('click', () => {
+      const t = document.getElementById('cfgTenant').value.trim() || 'default';
+      const m = document.getElementById('cfgMode').value;
+      setTenant(t);
+      setMode(m);
+      // Reinscrever realtime
+      setupRealtime();
+      alert('Tenant/Modo salvos.');
+    });
+
+    document.getElementById('btnSwitchTenant').addEventListener('click', () => {
+      const cur = getTenant();
+      const next = prompt('Novo tenant:', cur) || cur;
+      setTenant(next);
+      document.getElementById('cfgTenant').value = next;
+      setupRealtime();
+    });
+
+    document.getElementById('btnConfig').addEventListener('click', () => {
+      document.querySelector('.tab[data-tab="config"]').click();
+    });
+
+    // -------------------------
+    // Debug
+    // -------------------------
+    document.getElementById('btnShowLocalStorage').addEventListener('click', () => {
+      const dump = {};
+      for (let i=0; i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        dump[k] = localStorage.getItem(k);
+      }
+      document.getElementById('debugOut').textContent = JSON.stringify(dump, null, 2);
+    });
+    document.getElementById('btnClearLocalStorage').addEventListener('click', () => {
+      if (!confirm('Tem certeza que deseja limpar todo o localStorage?')) return;
+      localStorage.clear();
+      document.getElementById('debugOut').textContent = 'localStorage limpo.';
+    });
+
+    // -------------------------
+    // Bootstrap
+    // -------------------------
+    function bootstrap() {
+      // Preenche badges e inputs config
+      document.getElementById('tenantName').textContent = getTenant();
+      document.getElementById('cfgTenant').value = getTenant();
+      document.getElementById('cfgMode').value = getMode();
+
+      document.getElementById('cfgSupabaseUrl').value = getCfg(LS_KEYS.supabaseUrl, '');
+      document.getElementById('cfgSupabaseAnon').value = getCfg(LS_KEYS.supabaseAnon, '');
+
+      renderSales();
+      renderCashHistory();
+      renderAppointmentRequests();
+      renderAppointments();
+
+      setupRealtime();
+      refreshAuthUI();
+      loadProfileUI();
+    }
+
+    bootstrap();
   </script>
 </body>
 </html>
