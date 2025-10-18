@@ -205,6 +205,86 @@
           </div>
         </section>
 
+  <script>
+// ======== Fechamentos (Supabase + fallback local) ========
+async function salvarFechamentoSupabaseRecord(rec) {
+  try {
+    if (!supabase) throw new Error('Sem supabase');
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth?.user?.id;
+    if (!userId) throw new Error('Sem usuário');
+
+    const payload = {
+      user_id: userId,
+      data_caixa: rec.dataCaixaISO, // 'YYYY-MM-DD'
+      total_pix: Number(rec.pix || 0),
+      total_debito: Number(rec.debito || 0),
+      total_credito: Number(rec.credito || 0),
+      total_dinheiro: Number(rec.dinheiro || 0),
+      qtd_vendas: Number(rec.qtde || 0),
+      barbeiro_destaque: rec.topBarbeiro || null
+    };
+
+    const { error } = await supabase.from('fechamentos').insert(payload);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn('Salvar no Supabase falhou. Mantendo local:', e?.message || e);
+    return false;
+  }
+}
+
+async function carregarHistoricoFechamentosDia({ dataCaixaISO }) {
+  // tenta Supabase; se falhar, usa LocalStorage
+  try {
+    if (!supabase) throw new Error('Sem supabase');
+    const { data, error } = await supabase
+      .from('fechamentos')
+      .select('*')
+      .eq('data_caixa', dataCaixaISO)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    // adapta para o layout existente (o painel mostra nome/valores formais)
+    return (data || []).map(r => ({
+      id: crypto.randomUUID(), // ID apenas para UI (não apaga Supabase)
+      nomeCliente: isMaster
+        ? (activeTenantName || activeTenantId || 'Cliente')
+        : (__user?.user_metadata?.salon_name || 'Minha Barbearia'),
+      dataCaixa: fmtDate(dataCaixaISO),
+      pix: Number(r.total_pix || 0),
+      debito: Number(r.total_debito || 0),
+      credito: Number(r.total_credito || 0),
+      dinheiro: Number(r.total_dinheiro || 0),
+      total: Number(r.total_pix || 0) + Number(r.total_debito || 0) + Number(r.total_credito || 0) + Number(r.total_dinheiro || 0),
+      qtde: Number(r.qtd_vendas || 0)
+    }));
+  } catch (_e) {
+    // fallback local
+    const all = Storage.get(STORE_KEYS.CLOSURES, []).slice().reverse();
+    return all.filter(c => c.dataCaixa === fmtDate(dataCaixaISO));
+  }
+}
+
+async function carregarERenderHistoricoFechamentos({ dataCaixaISO }) {
+  const hist = await carregarHistoricoFechamentosDia({ dataCaixaISO });
+  const box = document.getElementById('cx-historico');
+  if (!box) return;
+  box.innerHTML = hist.map(c => `
+    <div class="border border-yellow-500/20 rounded p-2 flex items-center justify-between">
+      <div>
+        <div class="font-semibold">${c.nomeCliente || 'Cliente'} – ${c.dataCaixa}</div>
+        <div class="text-xs text-yellow-200/80">
+          Total: ${brl(c.total)} | PIX ${brl(c.pix)} • Déb ${brl(c.debito)} • Créd ${brl(c.credito)} • Din ${brl(c.dinheiro)}
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button data-id="${c.id}" class="cx-print text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Imprimir</button>
+      </div>
+    </div>
+  `).join('') || '<div class="text-sm opacity-70">Sem fechamentos salvos.</div>';
+}
+</script>
+
         <!-- ================= CAIXA (NOVO) ================= -->
         <section id="tab-caixa" class="hidden card rounded-xl shadow p-4">
           <div class="flex items-center justify-between">
@@ -1107,163 +1187,49 @@
 
     // =================== CAIXA (NOVO) ===================
     function renderCaixa(){
-      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
-      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
+  if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
+  if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
-      const inp = el('#cx-data');
-      if (inp && !inp.value) inp.value = new Date().toISOString().slice(0,10);
-      const sel = inp?.value || new Date().toISOString().slice(0,10);
+  const inp = el('#cx-data');
+  if (inp && !inp.value) inp.value = new Date().toISOString().slice(0,10);
+  const sel = inp?.value || new Date().toISOString().slice(0,10);
 
-      const vendas = Storage.get(STORE_KEYS.VENDAS, []);
-      const dia = vendas.filter(v => v.data === sel);
-      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
-      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
+  // NOVO: carrega histórico do dia (Supabase -> fallback local)
+  carregarERenderHistoricoFechamentos({ dataCaixaISO: sel });
 
-      const tot = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
-      el('#cx-total-dia').textContent = brl(tot);
-      el('#cx-qtde').textContent = String(dia.length);
+  const vendas = Storage.get(STORE_KEYS.VENDAS, []);
+  const dia = vendas.filter(v => v.data === sel);
+  const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
+  const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
 
-      const porBarb = groupCountSum(dia, 'barbeiro');
-      const top = Object.entries(porBarb).sort((a,b)=> b[1].count - a[1].count)[0];
-      el('#cx-top-barbeiro').textContent = top ? (barbs[top[0]]?.nome || '—') : '—';
+  const tot = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
+  el('#cx-total-dia').textContent = brl(tot);
+  el('#cx-qtde').textContent = String(dia.length);
 
-      const somaPix = sumWhere(dia, v=>v.pagamento==='pix');
-      const somaDeb = sumWhere(dia, v=>v.pagamento==='debito');
-      const somaCre = sumWhere(dia, v=>v.pagamento==='credito');
-      const somaDin = sumWhere(dia, v=>v.pagamento==='dinheiro');
-      el('#cx-pix').textContent = brl(somaPix);
-      el('#cx-debito').textContent = brl(somaDeb);
-      el('#cx-credito').textContent = brl(somaCre);
-      el('#cx-dinheiro').textContent = brl(somaDin);
+  const porBarb = groupCountSum(dia, 'barbeiro');
+  const top = Object.entries(porBarb).sort((a,b)=> b[1].count - a[1].count)[0];
+  el('#cx-top-barbeiro').textContent = top ? (barbs[top[0]]?.nome || '—') : '—';
 
-      el('#cx-tabela').innerHTML = dia.map(v=>`
-        <div class="px-3 py-2 text-sm flex items-center justify-between">
-          <div>${fmtDate(v.data)} — ${servs[v.servico]?.nome || '—'} (${barbs[v.barbeiro]?.nome || '—'})</div>
-          <div class="text-yellow-200/80">${v.pagamento.toUpperCase()}</div>
-          <div class="font-medium">${brl(v.valor)}</div>
-        </div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas neste dia.</div>`;
+  const somaPix = sumWhere(dia, v=>v.pagamento==='pix');
+  const somaDeb = sumWhere(dia, v=>v.pagamento==='debito');
+  const somaCre = sumWhere(dia, v=>v.pagamento==='credito');
+  const somaDin = sumWhere(dia, v=>v.pagamento==='dinheiro');
+  el('#cx-pix').textContent = brl(somaPix);
+  el('#cx-debito').textContent = brl(somaDeb);
+  el('#cx-credito').textContent = brl(somaCre);
+  el('#cx-dinheiro').textContent = brl(somaDin);
 
-      const hist = Storage.get(STORE_KEYS.CLOSURES, []).slice().reverse();
-      el('#cx-historico').innerHTML = hist.map(c => {
-        return `<div class="border border-yellow-500/20 rounded p-2 flex items-center justify-between">
-          <div>
-            <div class="font-semibold">${c.nomeCliente || 'Cliente'} – ${c.dataCaixa}</div>
-            <div class="text-xs text-yellow-200/80">Total: ${brl(c.total)} | PIX ${brl(c.pix)} • Déb ${brl(c.debito)} • Créd ${brl(c.credito)} • Din ${brl(c.dinheiro)}</div>
-          </div>
-          <div class="flex gap-2">
-            <button data-id="${c.id}" class="cx-print text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Imprimir</button>
-            <button data-id="${c.id}" class="cx-del text-xs px-2 py-1 rounded border border-yellow-500/40 text-yellow-300">Apagar</button>
-          </div>
-        </div>`;
-      }).join('') || '<div class="text-sm opacity-70">Sem fechamentos salvos.</div>';
-    }
+  el('#cx-tabela').innerHTML = dia.map(v=>`
+    <div class="px-3 py-2 text-sm flex items-center justify-between">
+      <div>${fmtDate(v.data)} — ${servs[v.servico]?.nome || '—'} (${barbs[v.barbeiro]?.nome || '—'})</div>
+      <div class="text-yellow-200/80">${v.pagamento.toUpperCase()}</div>
+      <div class="font-medium">${brl(v.valor)}</div>
+    </div>`).join('') || `<div class="p-3 text-sm opacity-70">Sem vendas neste dia.</div>`;
 
-    el('#cx-atualizar')?.addEventListener('click', renderCaixa);
-
-    el('#cx-fechar')?.addEventListener('click', ()=>{
-      const dataSel = el('#cx-data').value || new Date().toISOString().slice(0,10);
-      const vendas = Storage.get(STORE_KEYS.VENDAS, []);
-      const dia = vendas.filter(v => v.data === dataSel);
-      if (dia.length === 0){ toast('Sem vendas neste dia.'); return; }
-
-      if (typeof migrateAnonToCurrentScope === 'function') migrateAnonToCurrentScope();
-      if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
-
-      const total = dia.reduce((s,v)=> s + Number(v.valor||0), 0);
-      const closure = {
-        id: crypto.randomUUID(),
-        tenant: currentScope(),
-        nomeCliente: isMaster
-          ? (activeTenantName || activeTenantId || 'Cliente')
-          : (__user?.user_metadata?.salon_name || 'Minha Barbearia'),
-        operador: __user?.email || 'anon',
-        geradoEm: new Date().toLocaleString('pt-BR'),
-        dataCaixa: fmtDate(dataSel),
-        qtde: dia.length,
-        pix: sumWhere(dia, v=>v.pagamento==='pix'),
-        debito: sumWhere(dia, v=>v.pagamento==='debito'),
-        credito: sumWhere(dia, v=>v.pagamento==='credito'),
-        dinheiro: sumWhere(dia, v=>v.pagamento==='dinheiro'),
-        total,
-        itens: dia
-      };
-
-      Storage.push(STORE_KEYS.CLOSURES, closure);
-      toast('Caixa fechado e salvo! Abrindo impressão...');
-      renderCaixa();
-      printClosure(closure);
-    });
-
-    document.getElementById('cx-historico')?.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button'); if (!btn) return; const id = btn.getAttribute('data-id');
-      const list = Storage.get(STORE_KEYS.CLOSURES, []);
-      const found = list.find(x=>x.id===id);
-      if (btn.classList.contains('cx-print') && found){ printClosure(found); }
-      if (btn.classList.contains('cx-del')){
-        const rest = list.filter(x=>x.id!==id); Storage.set(STORE_KEYS.CLOSURES, rest); renderCaixa(); toast('Fechamento removido.');
-      }
-    });
-
-    function printClosure(c){
-      const barbs = keyBy(Storage.get(STORE_KEYS.BARBEIROS, []));
-      const servs = keyBy(Storage.get(STORE_KEYS.SERVICOS, []));
-      const area = el('#print-area');
-      area.classList.remove('hidden');
-      area.innerHTML = `
-        <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; padding: 24px; max-width: 800px; margin: 0 auto; color:#111;">
-          <h2 style="font-weight:700; font-size:20px; margin:0 0 4px;">Fechamento de Caixa — ${c.nomeCliente}</h2>
-          <div style="font-size:12px; color:#444; margin-bottom:12px;">Data do caixa: ${c.dataCaixa} • Operador: ${c.operador} • Gerado em: ${c.geradoEm}</div>
-          <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px;">
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">Total do dia</div>
-              <div style="font-size:22px; font-weight:700;">${brl(c.total)}</div>
-            </div>
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">Qtde de vendas</div>
-              <div style="font-size:22px; font-weight:700;">${c.qtde}</div>
-            </div>
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">PIX</div>
-              <div style="font-size:18px; font-weight:700;">${brl(c.pix)}</div>
-            </div>
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">Débito</div>
-              <div style="font-size:18px; font-weight:700;">${brl(c.debito)}</div>
-            </div>
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">Crédito</div>
-              <div style="font-size:18px; font-weight:700;">${brl(c.credito)}</div>
-            </div>
-            <div style="border:1px solid #e5e7eb; padding:8px; border-radius:8px;">
-              <div style="font-size:12px; color:#666;">Dinheiro</div>
-              <div style="font-size:18px; font-weight:700;">${brl(c.dinheiro)}</div>
-            </div>
-          </div>
-          <h3 style="margin:16px 0 8px; font-weight:700;">Vendas</h3>
-          <table style="width:100%; border-collapse:collapse; font-size:13px;">
-            <thead>
-              <tr>
-                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Serviço</th>
-                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Barbeiro</th>
-                <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Pagamento</th>
-                <th style="text-align:right; border-bottom:1px solid #e5e7eb; padding:6px 4px;">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${c.itens.map(v=>`<tr>
-                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${servs[v.servico]?.nome || '—'}</td>
-                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${barbs[v.barbeiro]?.nome || '—'}</td>
-                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px;">${v.pagamento.toUpperCase()}</td>
-                <td style="border-bottom:1px solid #f1f5f9; padding:6px 4px; text-align:right;">${brl(v.valor)}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-          <div style="margin-top:18px; font-size:11px; color:#666;">Navalha Digital — Fechamento de Caixa gerado automaticamente.</div>
-        </div>
-      `;
-      window.print();
-      setTimeout(()=>{ area.classList.add('hidden'); area.innerHTML=''; }, 300);
-    }
+  // Se quiser evitar sobrescrever o histórico carregado via Supabase,
+  // remova o bloco abaixo que preenche #cx-historico com LocalStorage.
+  // Caso mantenha, ele pode "pisar" no conteúdo já renderizado.
+}
 
     // =================== HELPERS ===================
     function groupCountSum(arr, key){ return arr.reduce((acc,cur)=>{ const k = cur[key]; const v = Number(cur.valor||0); if (!acc[k]) acc[k] = { count:0, sum:0 }; acc[k].count++; acc[k].sum += v; return acc; }, {}); }
@@ -1368,3 +1334,4 @@
   </script>
 </body>
 </html>
+
