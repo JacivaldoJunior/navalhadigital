@@ -1256,6 +1256,18 @@ async function carregarERenderHistoricoFechamentos({ dataCaixaISO }) {
       if (typeof migrateUserIdToTenantScope === 'function') migrateUserIdToTenantScope();
 
       seed();
+// 🧹 Limpa tenants antigos com id textual "barbearia-..."
+try {
+  const tenants = JSON.parse(localStorage.getItem(`bb_${__user?.id || 'anon'}_tenants`)) || [];
+  if (tenants.some(t => t.id && t.id.startsWith("barbearia-"))) {
+    console.warn("🧹 Limpando tenants antigos com formato textual...");
+    localStorage.removeItem(`bb_${__user?.id || 'anon'}_tenants`);
+    localStorage.removeItem('bb_master_last_tenant');
+  }
+} catch (e) {
+  console.error("Erro ao limpar tenants antigos:", e);
+}
+
       ensureDefaultTenantForMaster();
       refreshAll();
 
@@ -1337,5 +1349,6 @@ async function carregarERenderHistoricoFechamentos({ dataCaixaISO }) {
   </script>
 </body>
 </html>
+
 
 
