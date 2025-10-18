@@ -566,18 +566,21 @@ async function carregarERenderHistoricoFechamentos({ dataCaixaISO }) {
       else { badge.classList.add('hidden'); badge.textContent=''; }
     }
 
-    function ensureDefaultTenantForMaster(){
-      if (!isMaster) return;
-      const list = loadTenants();
-      if (list.length > 0) return;
-      const id = `barbearia-jacivaldo-${randomId(5)}`;
-      const nome = 'Barbearia do Jacivaldo';
-      list.push({ id, nome });
-      saveTenants(list);
-      setActiveTenant(id, nome);
-      toast('Cliente padrão criado e selecionado para o master.');
-    }
+   function ensureDefaultTenantForMaster() {
+  if (!isMaster) return;
+  
+  const list = loadTenants();
+  if (list.length > 0) return;
 
+  // Gera um UUID válido automaticamente
+  const id = crypto.randomUUID();
+  const nome = 'Barbearia do Jacivaldo';
+
+  list.push({ id, nome });
+  saveTenants(list);
+  setActiveTenant(id, nome);
+  toast('Cliente padrão criado e selecionado para o master.');
+}
     // ========================= ROLE =========================
     function computeRole(){
       const email = (__user?.email || '').toLowerCase();
@@ -1334,4 +1337,5 @@ async function carregarERenderHistoricoFechamentos({ dataCaixaISO }) {
   </script>
 </body>
 </html>
+
 
